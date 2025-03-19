@@ -12,14 +12,7 @@ exports.initSocket = (server) => {
 
     io.on("connection", (socket) => {
       console.log(` User connected: ${socket.id}`);
-
-    //  socket.on("chatmessage", (msg)=>{
-    //   console.log(msg);
-    //   if(msg === "ping"){
-    //     socket.emit("responce", "pong");
-    //   }
-    //  })
-    
+          
       gameEventConnection(io,socket)
 
       socket.on("disconnect", () => {
