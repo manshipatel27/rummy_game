@@ -233,10 +233,11 @@ module.exports = (io, socket) => {
       });
     });
 
-    // ======================== Draw Card Event ======================== >
+    // ======================== drawCard Event ======================== >
   
     socket.on("drawCard", ({ roomId, playerId, drawFrom }) => {
       const game = activeGames[roomId];
+
       if (!game) {
         socket.emit("error", { message: "Game not found." });
         return;
@@ -279,6 +280,8 @@ module.exports = (io, socket) => {
       });
     });
    
+    
+    // ======================== cardDisCarded from the user Event ======================== >
 
     socket.on("discardCard", ({ roomId, playerId, card }) => {
       const game = activeGames[roomId];
@@ -289,7 +292,7 @@ module.exports = (io, socket) => {
       }
   
       const player = game.players.find((p) => p.userId === playerId);
-  
+
       if (!player) {
         socket.emit("error", { message: "Player not found." });
         return;
@@ -300,9 +303,9 @@ module.exports = (io, socket) => {
         socket.emit("error", { message: "Card not found in player's hand." });
         return;
       }
-
+  
       const discardedCard = player.hand.splice(cardIndex, 1)[0];
-      game.discardPile.push(discardedCard);                                                    
+      game.discardPile.push(discardedCard);
   
       io.to(roomId).emit("cardDiscarded", {
         playerId,
