@@ -144,7 +144,6 @@ module.exports = (io, socket) => {
         return;
       }
 
-      // If no roomId is provided, find an existing room with space
       if (!roomId) {
         for (const [existingRoomId, game] of Object.entries(activeGames)) {
           if (game.players.length < 2) {
@@ -153,7 +152,6 @@ module.exports = (io, socket) => {
           }
         }
 
-        // If no available room, create a new one
         if (!roomId) {
           roomId = `room_${Object.keys(activeGames).length + 1}`;
           activeGames[roomId] = { players: [] };
@@ -169,7 +167,7 @@ module.exports = (io, socket) => {
       }
 
       if (activeGames[roomId].players.length < 2) {
-        activeGames[roomId].players.push({ userId, userName });
+        activeGames[roomId].players.push({userId, userName });
 
         
         io.to(roomId).emit("userJoined", {
@@ -179,7 +177,6 @@ module.exports = (io, socket) => {
           message: `${userName} has joined the room.`,
         });
 
-        // Send confirmation to the joining user
         socket.emit("joinedRoom", {
           roomId,
           message: `You have joined room: ${roomId}`,
@@ -200,7 +197,6 @@ module.exports = (io, socket) => {
         return;
       }
 
-      // Check if the room exists
       if (!activeGames[roomId]) {
         socket.emit("error", {
           message: "Room not found. Players must join first.",
@@ -220,17 +216,15 @@ module.exports = (io, socket) => {
 
       game.deck = createDeck();
       game.deck = shuffleDeck(game.deck);
-      game.discardPile = [game.deck.pop()]; // Initialize discard pile
-      game.currentPlayerIndex = 0; // Set the first player's turn
+      game.discardPile = [game.deck.pop()]; 
+      game.currentPlayerIndex = 0; 
 
-      // Deal 13 cards to each player at the start
+      // Deal 13 cards 
       game.players.forEach((player) => {
         player.hand = game.deck.splice(0, 13);
       });
-
       console.log(`Game started in room: ${roomId}`);
 
-      // Send game start event to all players in the room
       io.to(roomId).emit("gameStarted", {
         message: "Game has started!",
         players: game.players,
@@ -243,7 +237,6 @@ module.exports = (io, socket) => {
   
     socket.on("drawCard", ({ roomId, playerId, drawFrom }) => {
       const game = activeGames[roomId];
-
       if (!game) {
         socket.emit("error", { message: "Game not found." });
         return;
@@ -282,6 +275,39 @@ module.exports = (io, socket) => {
         drawnCard,
         playerHand: player.hand,
         deckSize: game.deck.length,
+        discardPile: game.discardPile,
+      });
+    });
+   
+
+    socket.on("discardCard", ({ roomId, playerId, card }) => {
+      const game = activeGames[roomId];
+  
+      if (!game) {
+        socket.emit("error", { message: "Game not found." });
+        return;
+      }
+  
+      const player = game.players.find((p) => p.userId === playerId);
+  
+      if (!player) {
+        socket.emit("error", { message: "Player not found." });
+        return;
+      }
+  
+      const cardIndex = player.hand.findIndex((c) => c === card);
+      if (cardIndex === -1) {
+        socket.emit("error", { message: "Card not found in player's hand." });
+        return;
+      }
+
+      const discardedCard = player.hand.splice(cardIndex, 1)[0];
+      game.discardPile.push(discardedCard);                                                    
+  
+      io.to(roomId).emit("cardDiscarded", {
+        playerId,
+        discardedCard,
+        playerHand: player.hand,
         discardPile: game.discardPile,
       });
     });
