@@ -5,7 +5,7 @@ exports.initSocket = (server) => {
   try {
     const io = new Server(server, {
       cors: {
-        origin: "https://localhost:3000",
+        origin: "*",
         methods: ["GET", "POST"],
       },
     });
