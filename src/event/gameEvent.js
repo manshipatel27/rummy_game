@@ -100,7 +100,7 @@ module.exports = (io, socket) => {
       currentPlayerIndex: game.currentPlayerIndex,
     });
   });
-  
+
   // ======================== drawCard Event ======================== >
 
   socket.on("drawCard", ({ roomId, playerId, drawFrom }) => {
@@ -183,31 +183,47 @@ module.exports = (io, socket) => {
   });
 
   // ======================== endTurn Event Handler ======================== >
-  
+
   socket.on("endTurn", ({ roomId, playerId }) => {
+    // Retrieve the game instance based on the roomId
+    
     const game = activeGames[roomId];
+
     if (!game) {
       socket.emit("error", { message: "Game not found." });
       return;
     }
+  
+    // Find the player based on playerId
     const player = game.players.find((p) => p.userId === playerId);
-
+  
+    // If the player is not found, emit an error message but don't disconnect
     if (!player) {
       socket.emit("error", { message: "Player not found." });
+      return;
     }
-
+  
+    // Check if it is the current player's turn
     if (game.players[game.currentPlayerIndex].userId !== playerId) {
+      // If it's not the player's turn, emit an error message but don't disconnect
       socket.emit("error", { message: "It's not your turn." });
       return;
     }
-    
-    game.currentPlayerIndex =
-      (game.currentPlayerIndex + 1) % activeGames.length;
+  
+    // Proceed to the next player's turn
+    game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+  
+    // Get the next player
     const nextPlayer = game.players[game.currentPlayerIndex];
-
+  
+    // Emit a "turnEnded" event to all players in the room, notifying them of the turn change
     io.to(roomId).emit("turnEnded", {
       message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn.`,
       currentPlayerId: nextPlayer.userId,
     });
+  
+    // Optionally log the turn change for debugging
+    console.log(`Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn.`);
   });
+
 };
