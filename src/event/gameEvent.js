@@ -184,39 +184,6 @@ module.exports = (io, socket) => {
 
   // ======================== endTurn Event Handler ======================== >
 
-  // socket.on("endTurn", ({ roomId, playerId }) => {
-
-  //   const game = activeGames[roomId];
-
-  //   if (!game) {
-  //     socket.emit("error", { message: "Game not found." });
-  //     return;
-  //   }
-
-  //   const player = game.players.find((p) => p.userId === playerId);
-
-  //   if (!player) {
-  //     socket.emit("error", { message: "Player not found." });
-  //     return;
-  //   }
-
-  //   if (game.players[game.currentPlayerIndex].userId !== playerId) {
-  //     socket.emit("error", { message: "It's not your turn." });
-  //     return;
-  //   }
-
-  //   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
-
-  //   const nextPlayer = game.players[game.currentPlayerIndex];
-
-  //   io.to(roomId).emit("turnEnded", {
-  //     message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn.`,
-  //     currentPlayerId: nextPlayer.userId,
-  //   });
-
-  //   console.log(`Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn.`);
-  // });
-
   socket.on("endTurn", ({ roomId, playerId }) => {
     const game = activeGames[roomId];
     console.log("Received endTurn event:", { roomId, playerId });
@@ -225,7 +192,7 @@ module.exports = (io, socket) => {
       socket.emit("error", { message: "Game not found." });
       return;
     }
-
+    
     const currentPlayer = game.players.find((p) => p.userId === playerId);
 
     if (!currentPlayer) {
@@ -237,7 +204,7 @@ module.exports = (io, socket) => {
       socket.emit("turnError", { message: "It's not your turn." });
       return;
     }
-
+    
     game.currentPlayerIndex =
       (game.currentPlayerIndex + 1) % game.players.length;
 
