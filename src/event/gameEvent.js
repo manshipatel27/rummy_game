@@ -2,7 +2,6 @@ const { createDeck, shuffleDeck } = require("../utils/deckUtils");
 
 module.exports = (io, socket) => {
   const activeGames = {};
-
   // ======================== joinRoom Event Handler ======================== >
 
   socket.on("joinRoom", ({ roomId, userId, userName }) => {
@@ -62,7 +61,7 @@ module.exports = (io, socket) => {
       socket.emit("error", {
         message: "roomId is required to start the game.",
       });
-      return;
+      return;6
     }
 
     if (!activeGames[roomId]) {
@@ -118,6 +117,11 @@ module.exports = (io, socket) => {
       return;
     }
 
+    if (game.players[game.currentPlayerIndex].userId !== playerId) {
+      socket.emit("turnError", { message: "It's not your turn." });
+      return;
+    }
+
     let drawnCard;
 
     if (drawFrom === "deck") {
@@ -136,7 +140,9 @@ module.exports = (io, socket) => {
       socket.emit("error", { message: "Invalid draw source." });
       return;
     }
-
+  
+    
+    player.drawn = true;
     player.hand.push(drawnCard);
 
     io.to(roomId).emit("cardDrawn", {
@@ -148,7 +154,7 @@ module.exports = (io, socket) => {
     });
   });
 
-  // ======================== cardDisCarded from the user Event ======================== >
+  // ======================== cardDiscarded from the user Event ======================== >
 
   socket.on("discardCard", ({ roomId, playerId, card }) => {
     const game = activeGames[roomId];
@@ -165,6 +171,11 @@ module.exports = (io, socket) => {
       return;
     }
 
+    if (game.players[game.currentPlayerIndex].userId !== playerId) {
+      socket.emit("turnError", { message: "It's not your turn." });
+      return;
+    }
+
     const cardIndex = player.hand.findIndex((c) => c === card);
     if (cardIndex === -1) {
       socket.emit("error", { message: "Card not found in player's hand." });
@@ -173,6 +184,9 @@ module.exports = (io, socket) => {
 
     const discardedCard = player.hand.splice(cardIndex, 1)[0];
     game.discardPile.push(discardedCard);
+     
+    
+     player.discarded = true;
 
     io.to(roomId).emit("cardDiscarded", {
       playerId,
@@ -184,35 +198,88 @@ module.exports = (io, socket) => {
 
   // ======================== endTurn Event Handler ======================== >
 
-  socket.on("endTurn", ({ roomId, playerId }) => {
+
+  // socket.on("endTurn", ({ roomId, playerId }) => {
+  //   const game = activeGames[roomId];
+  //   console.log("Received endTurn event:", { roomId, playerId });
+
+  //   if (!game) {
+  //     socket.emit("error", { message: "Game not found." });
+  //     return;
+  //   }
+
+  //   const currentPlayer = game.players.find((p) => p.userId === playerId);
+
+  //   if (!currentPlayer) {
+  //     socket.emit("error", { message: "Player not found." });
+  //     return;
+  //   }
+
+  //   if (game.players[game.currentPlayerIndex].userId !== playerId) {
+  //     socket.emit("turnError", { message: "It's not your turn." });
+  //     return;
+  //   }
+
+  //   currentPlayer.drawn = false;
+  //   currentPlayer.discarded = false;
+
+  //   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+
+  //   const nextPlayer = game.players[game.currentPlayerIndex];
+
+  //   io.to(roomId).emit("turnEnded", {
+  //     message: `Turn ended for ${currentPlayer.userName}. Now it's ${nextPlayer.userName}'s turn.`,
+  //     currentPlayerId: nextPlayer.userId,
+  //   });
+
+  // });
+
+
+
+
+socket.on("endTurn", ({ roomId, playerId }) => {
     const game = activeGames[roomId];
     console.log("Received endTurn event:", { roomId, playerId });
 
     if (!game) {
-      socket.emit("error", { message: "Game not found." });
-      return;
+        socket.emit("error", { message: "Game not found." });
+        return;
     }
-    
+
     const currentPlayer = game.players.find((p) => p.userId === playerId);
 
     if (!currentPlayer) {
-      socket.emit("error", { message: "Player not found." });
-      return;
+        socket.emit("error", { message: "Player not found." });
+        return;
     }
 
     if (game.players[game.currentPlayerIndex].userId !== playerId) {
-      socket.emit("turnError", { message: "It's not your turn." });
-      return;
+        socket.emit("turnError", { message: "It's not your turn." });
+        return;
     }
-    
-    game.currentPlayerIndex =
-      (game.currentPlayerIndex + 1) % game.players.length;
 
-    const nextPlayerId = game.players[game.currentPlayerIndex];
+    if (!currentPlayer.drawn) {
+        socket.emit("turnError", { message: "You must draw a card before ending your turn." });
+        return;
+    }
+
+    if (!currentPlayer.discarded) {
+        socket.emit("turnError", { message: "You must discard a card before ending your turn." });
+        return;
+    }
+
+    currentPlayer.drawn = false;
+    currentPlayer.discarded = false;
+
+    game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+
+    const nextPlayer = game.players[game.currentPlayerIndex];
 
     io.to(roomId).emit("turnEnded", {
-      message: `Turn ended for ${currentPlayer.userName}. Now it's ${nextPlayerId.userName}'s turn.`,
-      currentPlayerId: nextPlayerId.userId,
+        message: `Turn ended for ${currentPlayer.userName}. Now it's ${nextPlayer.userName}'s turn.`,
+        currentPlayerId: nextPlayer.userId,
     });
-  });
+});
+
+
 };
