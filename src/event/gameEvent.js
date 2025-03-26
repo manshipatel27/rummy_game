@@ -2,6 +2,7 @@ const { createDeck, shuffleDeck } = require("../utils/deckUtils");
 
 module.exports = (io, socket) => {
   const activeGames = {};
+  
   // ======================== joinRoom Event Handler ======================== >
 
   socket.on("joinRoom", ({ roomId, userId, userName }) => {
@@ -38,7 +39,6 @@ module.exports = (io, socket) => {
       activeGames[roomId].players.push({ userId, userName });
 
       io.to(roomId).emit("userJoined", {
-        roomId,
         userId,
         userName,
         message: `${userName} has joined the room.`,
@@ -126,7 +126,7 @@ module.exports = (io, socket) => {
 
     if (drawFrom === "deck") {
       if (game.deck.length === 0) {
-        socket.emit("error", { message: "Deck is empty." });
+        socket.emit("error", { message: "No Cards, Deck is empty." });
         return;
       }
       drawnCard = game.deck.shift();
@@ -141,7 +141,6 @@ module.exports = (io, socket) => {
       return;
     }
   
-    
     player.drawn = true;
     player.hand.push(drawnCard);
 
@@ -196,7 +195,7 @@ module.exports = (io, socket) => {
     });
   });
 
-  // ======================== endTurn Event Handler ======================== >
+  // ======================== endTurn Event Handler ======================== > 
 
 
   // socket.on("endTurn", ({ roomId, playerId }) => {
@@ -235,9 +234,7 @@ module.exports = (io, socket) => {
   // });
 
 
-
-
-socket.on("endTurn", ({ roomId, playerId }) => {
+  socket.on("endTurn", ({ roomId, playerId }) => {
     const game = activeGames[roomId];
     console.log("Received endTurn event:", { roomId, playerId });
 
@@ -282,4 +279,9 @@ socket.on("endTurn", ({ roomId, playerId }) => {
 });
 
 
+
+
+
+
 };
+  
