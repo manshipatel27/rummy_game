@@ -62,6 +62,50 @@ module.exports = (io, socket) => {
 
 
   */
+//   ======================== C ??? joinRoom  ========================>>>
+  socket.on("joinRoom", ({ roomId, userId, userName }) => {
+    try {
+      // ... existing validation code ...
+
+      console.log(`User ${userName} (${userId}) is joining room: ${roomId}`);
+      console.log("Current active games:", activeGames); // Debug log
+
+      socket.join(roomId);
+
+      if (!activeGames[roomId]) {
+        activeGames[roomId] = { players: [] };
+      }
+
+      // Add socket.id to player data for tracking
+      activeGames[roomId].players.push({ 
+        userId, 
+        userName,
+        socketId: socket.id 
+      });
+
+      io.to(roomId).emit("userJoined", {
+        userId,
+        userName,
+        message: `${userName} has joined the room.`,
+      });
+
+      // Emit to everyone in the room
+      io.to(roomId).emit("joinedRoom", {
+        roomId,
+        message: `${userName} has joined room: ${roomId}`,
+        players: activeGames[roomId].players,
+      });
+
+      console.log(`Room ${roomId} players:`, activeGames[roomId].players); // Debug log
+    } catch (error) {
+      console.error("Error in joinRoom:", error);
+      socket.emit("error", { message: "An unexpected error occurred" });
+    }
+  });
+
+
+
+
 
 
 
