@@ -9,8 +9,7 @@ exports.initSocket = (server) => {
         methods: ["GET", "POST"],
       },
     });
-
-    
+        
     io.on("connection", (socket) => {
       console.log(` User connected: ${socket.id}`);
           
@@ -25,4 +24,4 @@ exports.initSocket = (server) => {
   } catch (error) {
     console.log(error, "something went wrong");
   }
-};
+};  
