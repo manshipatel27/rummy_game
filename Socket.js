@@ -13,17 +13,23 @@ exports.initSocket = (server) => {
       },
     });
 
+    
+    //  Middelware for authentication.
     io.use(async (socket, next) => {
       try {
         // const token = socket.handshake.auth?.token;
         const token = socket.handshake.headers['auth'];
-
         console.log(`token ==> ${token}`);
 
         if (!token) {
           return next(new Error("Authentication token missing"));
         }
+
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (Date.now() >= decoded.exp * 1000) {
+            return next(new Error("Token has expired"));
+        }
+        
         const user = await User.findById(decoded.id);
 
         if (!user) {
@@ -37,20 +43,13 @@ exports.initSocket = (server) => {
         next(new Error("Unauthorized socket connection"));
       }
     });
-  
+     
+    
     io.on("connection", (socket) => {
       console.log(`✅ User connected: ${socket.id} | Name: ${socket.user.name}`);
       gameEventConnection(io, socket);
-      
-
     });
     return io;
-
-    
-
-
-
-
 
   } catch (error) {
     console.log(error, "something went wrong");

@@ -16,8 +16,13 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
+    // select: false
   },
-  score:{
+  dealScore: {
+    type: Number,
+    default: 0,
+  },
+  score: {
     type: Number,
     default: 0,
   },
@@ -37,6 +42,19 @@ const userSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
+  },
+  melds: {
+    type: Array,    
+    default: [],
+  },
+  hasDropped: {
+    type: Boolean,
+    default: false,
+  },
+  dropType: {
+    type: String,
+    enum: ['first', 'middle'],
+    default: null,
   },
 });
 
