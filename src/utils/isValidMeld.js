@@ -4,7 +4,7 @@ const WARNING_TIME_MS = 10000;
 
 /* wild Card implemention*/
 
-exports.isValidMeld =(meld, wildCard) => {
+/* exports.isValidMeld =(meld, wildCard) => {
   try {
     if (meld.length < 3) {
       console.log(" Meld must have at least 3 cards.");
@@ -141,7 +141,144 @@ exports.isValidMeld =(meld, wildCard) => {
     console.error(" Error in isValidMeld:", error);
     return false;
   }
-}
+} */
+
+exports.isValidMeld = (meld, wildCard) => {
+    try {
+      if (meld.length < 3) {
+        console.log("Meld must have at least 3 cards.");
+        return false;
+      }
+  
+      const ranks = [];
+      const suits = [];
+      let jokerCount = 0;
+  
+      const rankOrder = [
+        "A",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "J",
+        "Q",
+        "K",
+      ];
+  
+      // Check for duplicates
+      const cardSet = new Set(meld);
+      if (cardSet.size !== meld.length) {
+        console.log("Duplicate cards are not allowed.");
+        return false;
+      }
+  
+      // Extract ranks and suits using regex
+      for (const card of meld) {
+        if (card === "🃏") {
+          jokerCount++;
+        } else if (isWildCard(card, wildCard)) {
+          // Handle cards matching the wildCard value
+          jokerCount++;
+        } else {
+          const match = card.match(/^([♠️♥️♦️♣️]+)([A2-9JQK]|10)$/);
+          if (!match) {
+            console.log("Invalid card format:", card);
+            return false;
+          }
+          const [, suit, rank] = match;
+  
+          if (!rankOrder.includes(rank)) {
+            console.log("Invalid card rank:", card);
+            return false;
+          }
+  
+          ranks.push(rank);
+          suits.push(suit);
+        }
+      }
+  
+      const uniqueRanks = new Set(ranks);
+      const uniqueSuits = new Set(suits);
+  
+      // Prevent joker-only or excessive joker melds
+      if (jokerCount > 0 && jokerCount >= meld.length - jokerCount) {
+        console.log("Too many jokers: Not enough real cards.");
+        return false;
+      }
+  
+      // Ensure suits in a set are unique (no duplicates allowed)
+      const hasUniqueSuits = suits.length === new Set(suits).size;
+  
+      const isSet =
+        uniqueRanks.size === 1 && // All same rank
+        hasUniqueSuits &&
+        uniqueSuits.size + jokerCount === meld.length && // All suits different + jokers
+        (meld.length === 3 || meld.length === 4) &&
+        ((meld.length === 3 && jokerCount <= 1) ||
+          (meld.length === 4 && jokerCount <= 2));
+  
+      if (isSet) {
+        console.log("Valid Set:", meld);
+        return true;
+      }
+  
+      // Check for runs (sequences)
+      if (uniqueSuits.size === 1) {
+        const sortedIndices = ranks
+          .map((r) => rankOrder.indexOf(r))
+          .sort((a, b) => a - b);
+  
+        // Special Q-K-A run check
+        const isSpecialQKA =
+          meld.length === 3 &&
+          ranks.includes("Q") &&
+          ranks.includes("K") &&
+          ranks.includes("A") &&
+          sortedIndices.toString() ===
+            [
+              rankOrder.indexOf("Q"),
+              rankOrder.indexOf("K"),
+              rankOrder.indexOf("A"),
+            ].toString();
+  
+        if (isSpecialQKA) {
+          console.log("✅ Special Run Q-K-A:", meld);
+          return true;
+        }
+  
+        // Block K-A-2 wraparound
+        const hasKA2 =
+          ranks.includes("K") && ranks.includes("A") && ranks.includes("2");
+        if (hasKA2) {
+          console.log("Invalid sequence: K-A-2 is not allowed.");
+          return false;
+        }
+  
+        let gaps = 0;
+        for (let i = 1; i < sortedIndices.length; i++) {
+          const diff = sortedIndices[i] - sortedIndices[i - 1];
+          if (diff === 0) return false; // Duplicates in run
+          if (diff > 1) gaps += diff - 1; // Count missing cards
+        }
+  
+        if (gaps <= jokerCount) {
+          console.log("Valid Run:", meld);
+          return true;
+        }
+      }
+  
+      console.log("Not a valid Set or Run:", meld);
+      return false;
+    } catch (error) {
+      console.error("Error in isValidMeld:", error);
+      return false;
+    }
+};
 
 exports.calculatePenaltyPoints =(hand, wildCard) => {
   try {
@@ -162,7 +299,7 @@ exports.calculatePenaltyPoints =(hand, wildCard) => {
     };
     // return hand.reduce((total, card) => {
       const totalPoints = hand.reduce((total, card) => {
-      if (card === "🃏" || card === wildCard) return total + 50; // Wild cards are 50 points
+      if (card === "🃏" || card === wildCard) return total + 50; 
       const rank = card.match(/^\D*(\d+|[JQKA])/)?.[1];
       return total + (pointValues[rank] || 0);
     }, 0);
@@ -198,7 +335,7 @@ exports.countSequences = (melds, wildCard) => {
   return sequenceCount;
 };
 
-exports.isSequence = (meld, wildCard, pureCheck = false)=> {
+/* exports.isSequence = (meld, wildCard, pureCheck = false)=> {
   const rankOrder = [
     "A", "2", "3", "4", "5", "6", "7",
     "8", "9", "10", "J", "Q", "K",
@@ -221,6 +358,7 @@ exports.isSequence = (meld, wildCard, pureCheck = false)=> {
     }
   }
 
+
   if (new Set(suits).size > 1) return false; // must be same suit
 
   const sortedIndices = ranks.map(r => rankOrder.indexOf(r)).sort((a, b) => a - b);
@@ -238,7 +376,83 @@ exports.isSequence = (meld, wildCard, pureCheck = false)=> {
     return gaps <= jokerCount;
   }
 
+}; */
+
+// changebel 
+exports.isSequence = (meld, wildCard, pureCheck = false) => {
+  const rankOrder = [
+    "A", "2", "3", "4", "5", "6", "7",
+    "8", "9", "10", "J", "Q", "K",
+  ];
+
+  const ranks = [];
+  const suits = [];
+  let jokerCount = 0;
+
+  for (const card of meld) {
+    if (card === "🃏") {
+      if (pureCheck) return false; // Joker not allowed if checking for pure
+      jokerCount++;
+    } else if (isWildCard(card, wildCard)) {
+      if (pureCheck) return false; // Wild card not allowed if checking for pure
+      jokerCount++;
+    } else {
+      const match = card.match(/^([♠️♥️♦️♣️]+)([A2-9JQK]|10)$/);
+      if (!match) return false;
+      const [, suit, rank] = match;
+      ranks.push(rank);
+      suits.push(suit);
+    }
+  }
+
+  if (new Set(suits).size > 1) return false; // must be same suit
+  if (suits.length === 0) return false; // can't be all jokers
+
+  const sortedIndices = ranks.map(r => rankOrder.indexOf(r)).sort((a, b) => a - b);
+
+  // Special Q-K-A sequence check
+  const isSpecialQKA =
+    meld.length === 3 &&
+    ranks.includes("Q") &&
+    ranks.includes("K") &&
+    ranks.includes("A") &&
+    sortedIndices.toString() ===
+      [
+        rankOrder.indexOf("Q"),
+        rankOrder.indexOf("K"),
+        rankOrder.indexOf("A"),
+      ].toString();
+
+  if (isSpecialQKA) {
+    return pureCheck ? true : true; // Special case is always pure
+  }
+
+  let gaps = 0;
+  for (let i = 1; i < sortedIndices.length; i++) {
+    const diff = sortedIndices[i] - sortedIndices[i - 1];
+    if (diff === 0) return false; // duplicate ranks invalid
+    if (diff > 1) gaps += diff - 1;
+  }
+
+  if (pureCheck) {
+    return gaps === 0;
+  } else {
+    return gaps <= jokerCount;
+  }
 };
+
+function isWildCard(card, wildCard) {
+  if (!card || !wildCard) return false;
+  
+  
+  if (card === "🃏") return true;
+  
+  // If wildCard is ♦️10, then any card with rank 10 is wild
+  const wildRank = wildCard.match(/^([♠️♥️♦️♣️]+)([A2-9JQK]|10)$/)?.[2];
+  const cardRank = card.match(/^([♠️♥️♦️♣️]+)([A2-9JQK]|10)$/)?.[2];
+  
+  return wildRank === cardRank;
+}
 
 exports.handleTurnTimeout = (io, roomId, activeGames) => {
   try {

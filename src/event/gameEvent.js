@@ -184,108 +184,6 @@ module.exports = (io, socket) => {
     }
   });
 
-  /* wild jocker implemention */
-
-  // socket.on("startGame", async ({ roomId }) => {
-  //   try {
-  //     if (!isValidString(roomId)) {
-  //       socket.emit("error", { message: "Invalid room ID." });
-  //       return;
-  //     }
-  //     if (!activeGames[roomId]) {
-  //       socket.emit("turnError", { message: "Room not found." });
-  //       return;
-  //     }
-  //     const game = activeGames[roomId];
-
-  //     if (game.started) {
-  //       socket.emit("turnError", { message: "Game has already started." });
-  //       return;
-  //     }
-
-  //     if (game.players.length < 2) {
-  //       socket.emit("turnError", {
-  //         message: "At least 2 players are required to start the game.",
-  //       });
-  //       return;
-  //     }
-
-  //     game.started = true;
-
-  //     // Dynamically determine number of decks
-  //     let numPlayers = game.players.length;
-  //     let numDecks = numPlayers <= 6 ? 2 : 3;
-
-  //     let deck = createDeck(numDecks);
-  //     deck = shuffleDeck(deck);
-  //     game.deck = deck;
-
-  //     console.log(`Number of Players: ${numPlayers}`);
-  //     console.log(`Number of Decks Used: ${numDecks}`);
-  //     console.log(`Total Number of Cards After Shuffling: ${deck.length}`);
-
-  //     let cardsPerPlayer = game.players.length === 2 ? 13 : game.players.length <= 4 ? 10 : 7;
-
-  //     if (game.deck.length < game.players.length * cardsPerPlayer + 5) {
-  //       socket.emit("turnError", {
-  //         message: "Not enough cards in deck to start the game.",
-  //       });
-  //       return;
-  //     }
-
-  //     // Select a wild card
-  //     const wildCard = game.deck.pop();
-  //     game.wildCard = wildCard;
-  //     console.log(`Wild Card: ${wildCard}`);
-
-  //     do {
-  //       game.discardPile = [game.deck.pop()];
-  //     } while (game.discardPile[0] === "🃏");
-
-  //     game.currentPlayerIndex = 0;
-
-  //     for (const player of game.players) {
-  //       await updateUser(player.userId, {
-  //         $inc: { gamesPlayed: 1 },
-  //         currentGameStatus: "playing",
-  //         dealScore: 0,
-  //         melds: [],
-  //       });
-  //     }
-
-  //     game.players.forEach((player) => {
-  //       player.hand = game.deck.splice(0, cardsPerPlayer);
-  //       player.initialHandCount = player.hand.length;
-  //       io.to(player.socketId).emit("playerHand", {
-  //         hand: player.hand,
-  //       });
-  //     });
-
-  //     // startTurnTimer(io, roomId, activeGames);
-
-  //     // Notify players about the wild card
-  //     io.to(roomId).emit("gameStarted", {
-  //       message: "Game has started",
-  //       players: game.players.map((p) => ({
-  //         userId: p.userId,
-  //         userName: p.userName,
-  //         handSize: cardsPerPlayer,
-  //       })),
-  //       discardPile: game.discardPile,
-  //       currentPlayerIndex: game.currentPlayerIndex,
-  //       wildCard: game.wildCard, // Broadcast the wild card
-  //       timeLeft: TURN_DURATION_SECONDS,
-  //     });
-
-  //     console.log(`Game successfully started in room: ${roomId}`);
-  //     console.log(`Wild Card: ${wildCard}`);
-  //   } catch (error) {
-  //     console.error("Error in startGame:", error);
-  //     socket.emit("turnError", { message: "An unexpected error occurred" });
-  //   }
-  // });
-
-
   socket.on("drawCard", async ({ drawFrom }) => {
     try {
       // 1. Authentication check
@@ -375,7 +273,9 @@ module.exports = (io, socket) => {
     }
   });
 
-  socket.on("discardCard", async ({ card }) => {
+  /* =================================== player.hand === 0 ===================================> */
+
+/*   socket.on("discardCard", async ({ card }) => {
     try {
       if (!socket.user?._id) {
         return socket.emit("turnError", { message: "Unauthorized access." });
@@ -402,39 +302,35 @@ module.exports = (io, socket) => {
           message: "Already discarded this turn.",
         });
       }
-
-      //  it's the player's turn
+      
       if (game.players[game.currentPlayerIndex].userId !== userId) {
         return socket.emit("turnError", { message: "It's not your turn." });
       }
 
-      // Allow discarding the last card even if the player hasn't drawn a card
-      if (!player.drawn && player.hand.length > 1) {
+     
+      if (!player.drawn && player.hand.length > 1 && !player.melds?.length) {
         return socket.emit("turnError", {
           message: "You must draw a card before discarding.",
         });
       }
 
-      // Find the card index in the player's hand
+      
       const cardIndex = player.hand.findIndex((c) => c.trim() === card.trim());
       if (cardIndex === -1) {
         return socket.emit("turnError", { message: "Card not found in hand." });
       }
 
-      // Discard the card and add it to the discard pile
       const discardedCard = player.hand.splice(cardIndex, 1)[0];
       game.discardPile.unshift(discardedCard);
       player.discarded = true;
 
-      // Update the discard pile and player's hand for everyone
+      
       io.to(roomId).emit("updateDiscardPile", game.discardPile);
       io.to(player.socketId).emit("updateHand", player.hand);
 
+      
       if (player.hand.length === 0) {
-        console.log(
-          "Player has no cards left after discard! Declaring winner:",
-          player.userId
-        );
+        console.log("Player has discarded their last card! Declaring winner:", player.userId);
         player.score = 0;
 
         await User.findByIdAndUpdate(
@@ -448,7 +344,7 @@ module.exports = (io, socket) => {
 
         game.players.forEach((p) => {
           if (p.userId !== player.userId) {
-            p.score = calculatePenaltyPoints(p.hand);
+            p.score = calculatePenaltyPoints(p.hand, game.wildCard);
           }
         });
 
@@ -460,7 +356,7 @@ module.exports = (io, socket) => {
           })),
         });
 
-        cleanupTimers?.(roomId);
+        cleanupTimers(roomId);
         delete activeGames[roomId];
         return;
       }
@@ -476,8 +372,7 @@ module.exports = (io, socket) => {
 
       nextPlayer.drawn = false;
       nextPlayer.discarded = false;
-
-      // Notify the Next player
+     
       io.to(nextPlayer.socketId).emit("turnEnded", {
         message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
         currentPlayerId: nextPlayer.userId,
@@ -498,15 +393,12 @@ module.exports = (io, socket) => {
       console.error("Discard card error:", error);
       socket.emit("turnError", { message: "Failed to discard card" });
     }
-  });
+  }); 
 
   socket.on("layDownMelds", async ({ melds }) => {
 
-    // console.log("Received meld:", melds);
-    // console.log("Socket userId:", socket.userId);
-    // console.log("Socket roomId:", socket.roomId);
+    console.log("Received meld:", melds);
 
-    
     try {
       const playerId = socket.userId;
       const roomId = socket.roomId;
@@ -561,7 +453,7 @@ module.exports = (io, socket) => {
           { new: true }
         );
 
-        // Give 0 points to other players
+  
         game.players.forEach((p) => {
           if (p.userId !== playerId) {
             p.score = 0;
@@ -581,14 +473,22 @@ module.exports = (io, socket) => {
         delete activeGames[roomId];
         return;
       }
+      
+    
+       // Create a copy of player's hand to track removed cards
+       const handCopy = [...player.hand];
 
       // Remove cards from player's hand
       melds.flat().forEach((card) => {
         const index = player.hand.indexOf(card);
         if (index !== -1) {
-          player.hand.splice(index, 1);
+          handCopy.splice(index, 1);
         }
       });
+
+      // extra
+      // Update player's actual hand
+      player.hand = handCopy;
 
       if (!player.melds) player.melds = [];
       player.melds.push(...melds);
@@ -598,12 +498,25 @@ module.exports = (io, socket) => {
       });
       console.log("User updated with melds:", updatedUser);
 
-      if (player.hand.length === 0) {
-        console.log(
-          "Player has no cards left after melds! Declaring winner:",
-          playerId
-        );
-        player.score = 0;
+      io.to(player.socketId).emit("updateHand", player.hand);
+
+      // if (player.hand.length === 0) {
+      //   console.log(
+      //     "Player has no cards left after melds! Declaring winner:",
+      //     playerId
+      //   );
+      //   player.score = 0;
+
+
+            // Check if this was a complete meld (all cards except one for discard)
+            if (player.hand.length === 1) {
+              console.log("Player has one card left after melds! Awaiting discard to win.");
+            } else if (player.hand.length === 0) {
+              console.log(
+                "Player has no cards left after melds! Declaring winner:",
+                userId
+              );
+              player.score = 0;
 
         await User.findByIdAndUpdate(
           playerId,
@@ -638,104 +551,305 @@ module.exports = (io, socket) => {
       console.error("Error in layDownMelds event:", error);
       socket.emit("turnError", { message: "An unexpected error occurred." });
     }
-  });
+  });  */
 
-  /* socket.on("dropGame", async () => {
-  try {
-    
-    if (!socket.user?._id) {
-      return socket.emit("turnError", { message: "Unauthorized access." });
-    }
-
-    
-    const roomId = Array.from(socket.rooms).find((room) => room !== socket.id);
-    if (!roomId || !activeGames[roomId]) {
-      return socket.emit("turnError", {
-        message: "You're not in an active game.",
-      });
-    }
-
-    const game = activeGames[roomId];
-    const userId = socket.user._id;
-
-    
-    const playerIndex = game.players.findIndex((p) => p.userId === userId);
-    if (playerIndex === -1) {
-      return socket.emit("turnError", { message: "Player not found in the game." });
-    }
-
-    const player = game.players[playerIndex];
-
-    // Determine the penalty based on whether the player has drawn a card
-    const penalty = player.drawn ? 40 : 20;
-
-    
-    // player.score = (player.score || 0) + penalty;
-    
-
-    // Remove the player from the game
-    game.players.splice(playerIndex, 1);
-
-    // Update the player's status in the database
-    await User.findByIdAndUpdate(
-      userId,
-      {
-        $inc: { score: penalty },
-        currentGameStatus: "dropped",
-      },
-      { new: true }
-    );
-
-    // Broadcast the updated scores and player status to all players
-    io.to(roomId).emit("playerDropped", {
-      message: `${player.userName} has dropped from the game.`,
-      playerId: player.userId,
-      penalty,
-      scores: game.players.map((p) => ({
-        playerId: p.userId,
-        score: p.score,
-      })),
-    });
-
-    console.log(`Player ${player.userName} dropped from the game in room ${roomId}.`);
-
-    if (game.players.length === 1) {
-      const winner = game.players[0];
+  //could suit 
+  socket.on("layDownMelds", async ({ melds }) => {
+    console.log("Received meld:", melds);
+  
+    try {
+      if (!socket.user?._id) {
+        return socket.emit("turnError", { message: "Unauthorized access." });
+      }
       
-      io.to(roomId).emit("gameOver", {
-        message: `🎉 ${winner.userName} wins! All other players have dropped.`,
-        winnerId: winner.userId,
-        scores: game.players.map((p) => ({
-          playerId: p.userId,
-          score: p.score,
-        })),
+      const roomId = Array.from(socket.rooms).find(
+        (room) => room !== socket.id
+      );
+  
+      if (!roomId || !activeGames[roomId]) {
+        return socket.emit("turnError", {
+          message: "You're not in an active game.",
+        });
+      }
+      
+      const game = activeGames[roomId];
+      const userId = socket.user._id;
+  
+      const player = game.players.find((p) => p.userId === userId);
+      if (!player) {
+        socket.emit("error", { message: "Player not found." });
+        return;
+      }
+  
+      if (game.players[game.currentPlayerIndex].userId !== userId) {
+        socket.emit("turnError", { message: "It's not your turn." });
+        return;
+      }
+  
+      if (!Array.isArray(melds) || melds.length === 0) {
+        socket.emit("turnError", { message: "Invalid melds format." });
+        return;
+      }
+  
+      // Log the player's hand before processing
+      console.log("Player's hand before melding:", player.hand);
+      
+      // Create a new array to store cards that will remain after melding
+      let remainingCards = [...player.hand];
+      
+      // Create a flat array of all cards in the melds for easier checking
+      const allMeldCards = melds.flat();
+      console.log("All cards in melds:", allMeldCards);
+      
+      // Check if all meld cards exist in player's hand (using exact string matching)
+      for (const meldCard of allMeldCards) {
+        const cardIndex = remainingCards.findIndex(handCard => 
+          handCard.trim() === meldCard.trim()
+        );
+        
+        if (cardIndex === -1) {
+          console.log(`Card ${meldCard} not found in player's hand`);
+          socket.emit("turnError", { message: `Card ${meldCard} not found in your hand.` });
+          return;
+        }
+        
+        // Remove this card from remaining cards
+        remainingCards.splice(cardIndex, 1);
+      }
+  
+      // Validate all melds
+      for (const meld of melds) {
+        if (!isValidMeld(meld, game.wildCard)) {
+          socket.emit("turnError", { message: "Invalid meld detected." });
+          return;
+        }
+      }
+  
+      const hasPure = hasPureSequence(melds, game.wildCard);
+      const totalSequences = countSequences(melds, game.wildCard);
+  
+      if (!hasPure || totalSequences < 2) {
+        console.log("Wrong Declaration by player:", userId);
+  
+        const wrongPenalty = Math.min(calculatePenaltyPoints(player.hand, game.wildCard), 80);
+  
+        player.score = wrongPenalty;
+  
+        io.to(roomId).emit("wrongDeclaration", {
+          playerId: userId,
+          penaltyPoints: wrongPenalty,
+        });
+  
+        await User.findByIdAndUpdate(
+          userId,
+          { $inc: { wrongDeclarations: 1 } },
+          { new: true }
+        );
+  
+        game.players.forEach((p) => {
+          if (p.userId !== userId) {
+            p.score = 0;
+          }
+        });
+  
+        io.to(roomId).emit("gameOver", {
+          winner: null,
+          wrongDeclarer: userId,
+          scores: game.players.map((p) => ({
+            playerId: p.userId,
+            score: p.score,
+          })),
+        });
+  
+        cleanupTimers(roomId);
+        delete activeGames[roomId];
+        return;
+      }
+  
+      // Update player's hand with remaining cards
+      player.hand = remainingCards;
+      console.log("Player's hand after melding:", player.hand);
+  
+      if (!player.melds) player.melds = [];
+      player.melds.push(...melds);
+  
+      const updatedUser = await updateMelds(userId, {
+        $set: { melds: player.melds },
       });
-     
-      startTurnTimer?.(roomId); 
-      delete activeGames[roomId];
-      return;
+      console.log("User updated with melds:", updatedUser);
+  
+      // Emit updated hand to player
+      io.to(player.socketId).emit("updateHand", player.hand);
+  
+      // Check if this was a complete meld (all cards except one for discard)
+      if (player.hand.length === 1) {
+        console.log("Player has one card left after melds! Awaiting discard to win.");
+      } else if (player.hand.length === 0) {
+        console.log(
+          "Player has no cards left after melds! Declaring winner:",
+          userId
+        );
+        player.score = 0;
+  
+        await User.findByIdAndUpdate(
+          userId,
+          { $inc: { gamesWon: 1 } },
+          { new: true }
+        );
+  
+        game.players.forEach((p) => {
+          if (p.userId !== userId) {
+            p.score = calculatePenaltyPoints(p.hand, game.wildCard);
+          }
+        });
+  
+        io.to(roomId).emit("gameOver", {
+          winner: userId,
+          scores: game.players.map((p) => ({
+            playerId: p.userId,
+            score: p.score,
+          })),
+        });
+  
+        cleanupTimers(roomId);
+        delete activeGames[roomId];
+        return;
+      }
+  
+      io.to(roomId).emit("meldsLaidDown", {
+        playerId: userId,
+        melds: player.melds,
+      });
+    } catch (error) {
+      console.error("Error in layDownMelds event:", error);
+      socket.emit("turnError", { message: "An unexpected error occurred." });
     }
-
-    // If no players are left, clean up the game
-    if (game.players.length === 0) {
-      delete activeGames[roomId];
-      return;
+  });
+  
+  socket.on("discardCard", async ({ card }) => {
+    try {
+      if (!socket.user?._id) {
+        return socket.emit("turnError", { message: "Unauthorized access." });
+      }
+      const roomId = Array.from(socket.rooms).find(
+        (room) => room !== socket.id
+      );
+  
+      if (!roomId || !activeGames[roomId]) {
+        return socket.emit("turnError", {
+          message: "You're not in an active game.",
+        });
+      }
+      const game = activeGames[roomId];
+      const userId = socket.user._id;
+  
+      const player = game.players.find((p) => p.userId === userId);
+      if (!player) {
+        return socket.emit("turnError", { message: "Player data not found." });
+      }
+  
+      if (player.discarded) {
+        return socket.emit("turnError", {
+          message: "Already discarded this turn.",
+        });
+      }
+  
+      if (game.players[game.currentPlayerIndex].userId !== userId) {
+        return socket.emit("turnError", { message: "It's not your turn." });
+      }
+  
+      // Modified this condition to allow discarding without drawing if player has melded
+      if (!player.drawn && player.hand.length > 1 && !player.melds?.length) {
+        return socket.emit("turnError", {
+          message: "You must draw a card before discarding.",
+        });
+      }
+  
+      // Log player's hand before discarding
+      console.log("Player's hand before discarding:", player.hand);
+      console.log("Card to discard:", card);
+      
+      const cardIndex = player.hand.findIndex((c) => c.trim() === card.trim());
+      if (cardIndex === -1) {
+        return socket.emit("turnError", { message: "Card not found in hand." });
+      }
+  
+      const discardedCard = player.hand.splice(cardIndex, 1)[0];
+      game.discardPile.unshift(discardedCard);
+      player.discarded = true;
+  
+      // Log player's hand after discarding
+      console.log("Player's hand after discarding:", player.hand);
+  
+      io.to(roomId).emit("updateDiscardPile", game.discardPile);
+      io.to(player.socketId).emit("updateHand", player.hand);
+  
+      // Check if player has won after discarding the last card
+      if (player.hand.length === 0) {
+        console.log("Player has discarded their last card! Declaring winner:", player.userId);
+        
+        // For final verification, log the player's melds to check if they're valid
+        console.log("Player's final melds:", player.melds);
+        
+        player.score = 0;
+  
+        await User.findByIdAndUpdate(
+          player.userId,
+          {
+            $inc: { gamesWon: 1 },
+            currentGameStatus: "finished",
+          },
+          { new: true }
+        );
+  
+        game.players.forEach((p) => {
+          if (p.userId !== player.userId) {
+            p.score = calculatePenaltyPoints(p.hand, game.wildCard);
+          }
+        });
+  
+        io.to(roomId).emit("gameOver", {
+          winner: player.userId,
+          scores: game.players.map((p) => ({
+            playerId: p.userId,
+            score: p.score,
+          })),
+        });
+  
+        cleanupTimers(roomId);
+        delete activeGames[roomId];
+        return;
+      }
+  
+      // Update the current player index
+      game.currentPlayerIndex =
+        (game.currentPlayerIndex + 1) % game.players.length;
+      const nextPlayer = game.players[game.currentPlayerIndex];
+  
+      nextPlayer.drawn = false;
+      nextPlayer.discarded = false;
+  
+      io.to(roomId).emit("turnEnded", {
+        message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
+        currentPlayerId: nextPlayer.userId,
+      });
+  
+      io.to(nextPlayer.socketId).emit("yourTurn", {
+        message: `It's your turn, ${nextPlayer.userName}`,
+      });
+  
+      await User.findByIdAndUpdate(
+        userId,
+        { score: player.score },
+        { new: true }
+      );
+  
+      console.log("Discarded:", card, "by", player.userName);
+    } catch (error) {
+      console.error("Discard card error:", error);
+      socket.emit("turnError", { message: "Failed to discard card" });
     }
-
-    // If more than 1 player remains, continue the game
-    io.to(roomId).emit("gameContinues", {
-      message: "The game continues with the remaining players.",
-      remainingPlayers: game.players.map((p) => ({
-        playerId: p.userId,
-        userName: p.userName,
-      })),
-    });
-  } catch (error) {
-    console.error("Error in dropGame event:", error);
-    socket.emit("turnError", { message: "An unexpected error occurred." });
-  }
-
-  }); */
+  });
 
   socket.on("dropGame", async () => {
     try {
@@ -844,14 +958,6 @@ module.exports = (io, socket) => {
       socket.emit("turnError", { message: "An unexpected error occurred." });
     }
   });
-
-  /* modifyed LeaveRoom event few changes in this events
-
-  1. pure sequence and impure sequence, 
-  2.  wild cards functionality.
-  3.  wrong declaration and penalty points.
-
-  */
 
   socket.on("leaveRoom", () => {
     console.log(`GameEvent: User disconnected: ${socket.id}`);
