@@ -1,13 +1,14 @@
 const { createDeck, shuffleDeck } = require("../utils/deckUtils");
 const {
   isValidMeld,
-  calculatePenaltyPoints,
-  countSequences,
   hasPureSequence,
+  countSequences,
+  calculatePenaltyPoints,
+  resetGameForNextRound,
 } = require("../utils/isValidMeld");
 // startTurnTimer, cleanupTimers, TURN_DURATION_SECONDS
 
-const { updateUser, updateMelds } = require("../userService");
+const { updateUser } = require("../userService");
 const User = require("../../model/userModel");
 const activeGames = {};
 const MAX_PLAYERS = 4;
@@ -16,50 +17,60 @@ const isValidString = (param) =>
   typeof param === "string" && param.trim() !== "";
 
 module.exports = (io, socket) => {
+ 
+  socket.on("joinRoom", async ({ roomId, gameType = "pool101", poolLimit = null }) => {
+      try {
+        const { _id: userId, name: userName } = socket.user;
 
-  socket.on("joinRoom", async ({ roomId }) => {
-    try {
-      const { _id: userId, name: userName } = socket.user;
+        socket.userId = userId;
+        socket.roomId = roomId;
 
-      socket.userId = userId;
-      socket.roomId = roomId;
+        socket.join(roomId);
 
-      socket.join(roomId);
-
-      const game = (activeGames[roomId] ||= {
-        players: [],
-        started: false,
-        createdAt: new Date(),
-        createdBy: userId,
-      });
-
-      if (game.players.find((p) => p.userId == userId)) {
-        return socket.emit("turnError", {
-          message: "User already joined the room.",
+        const game = (activeGames[roomId] ||= {
+          players: [],
+          started: false,
+          createdAt: new Date(),
+          createdBy: userId,
+          gameType,
+          poolLimit,
+          round: 1,
         });
+
+        if (game.players.length > 0 && game.gameType !== gameType) {
+          return socket.emit("turnError", {
+            message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
+          });
+        }
+
+        if (game.players.find((p) => p.userId == userId)) {
+          return socket.emit("turnError", {
+            message: "User already joined the room.",
+          });
+        }
+
+        if (game.players.length >= MAX_PLAYERS) {
+          return socket.emit("turnError", { message: "Room is full." });
+        }
+
+        const player = { userId, userName, socketId: socket.id, score: 0 };
+        game.players.push(player);
+
+        await updateUser(userId, { currentGameStatus: "waiting" });
+
+        const payload = {
+          players: game.players,
+          message: `${userName} has joined the room.`,
+        };
+
+        io.to(roomId).emit("userJoined", payload);
+        io.to(roomId).emit("joinedRoom", { ...payload, roomId });
+      } catch (err) {
+        console.error("joinRoom error:", err);
+        socket.emit("turnError", { message: "Unexpected error in joinRoom." });
       }
-
-      if (game.players.length >= MAX_PLAYERS) {
-        return socket.emit("turnError", { message: "Room is full." });
-      }
-      const player = { userId, userName, socketId: socket.id };
-      game.players.push(player);
-
-      await updateUser(userId, { currentGameStatus: "waiting" });
-
-      const payload = {
-        players: game.players,
-        message: `${userName} has joined the room.`,
-      };
-
-      // Notify users
-      io.to(roomId).emit("userJoined", payload);
-      io.to(roomId).emit("joinedRoom", { ...payload, roomId });
-    } catch (err) {
-      console.error("joinRoom error:", err);
-      socket.emit("turnError", { message: "Unexpected error in joinRoom." });
     }
-  });
+  );
 
   socket.on("startGame", async ({ roomId }) => {
     try {
@@ -67,10 +78,12 @@ module.exports = (io, socket) => {
         socket.emit("error", { message: "Invalid room ID." });
         return;
       }
+
       if (!activeGames[roomId]) {
         socket.emit("turnError", { message: "Room not found." });
         return;
       }
+
       const game = activeGames[roomId];
 
       if (game.started) {
@@ -87,11 +100,15 @@ module.exports = (io, socket) => {
 
       game.started = true;
 
-      // let deck = createDeck();
-      // deck = shuffleDeck(deck);
-      // game.deck = deck;
+      if (["pool61", "pool101", "pool201"].includes(game.gameType)) {
+        game.poolLimit =
+          game.gameType === "pool61"
+            ? 61
+            : game.gameType === "pool101"
+            ? 101
+            : 201;
+      }
 
-      // CHANGE - Dynamically determine number of decks
       let numPlayers = game.players.length;
       let numDecks = numPlayers <= 6 ? 2 : 3;
 
@@ -103,15 +120,7 @@ module.exports = (io, socket) => {
       console.log(`Number of Decks Used: ${numDecks}`);
       console.log(`Total Number of Cards After Shuffling: ${deck.length}`);
 
-      let cardsPerPlayer =
-        game.players.length === 2 ? 13 : game.players.length <= 4 ? 10 : 7;
-
-      /*  if (game.deck.length < game.players.length * cardsPerPlayer + 1) {
-        socket.emit("turnError", {
-          message: "Not enough cards in deck to start the game.",
-        });
-        return;
-      } */
+      let cardsPerPlayer = 13;
 
       if (game.deck.length < game.players.length * cardsPerPlayer + 5) {
         socket.emit("turnError", {
@@ -119,7 +128,7 @@ module.exports = (io, socket) => {
         });
         return;
       }
-      // Select a wild card
+
       const wildCard = game.deck.pop();
       game.wildCard = wildCard;
 
@@ -133,40 +142,16 @@ module.exports = (io, socket) => {
         await updateUser(player.userId, {
           $inc: { gamesPlayed: 1 },
           currentGameStatus: "playing",
-          score: 0,
+          score: player.score || 0,
           melds: [],
         });
       }
 
-      // game.players.forEach((player) => {
-      //   player.hand = game.deck.splice(0, cardsPerPlayer);
-      //   player.initialHandCount = player.hand.length;
-      //   io.to(player.socketId).emit("playerHand", {
-      //     hand: player.hand,
-      //   });
-      // });
-
       game.players.forEach((player) => {
         player.hand = game.deck.splice(0, cardsPerPlayer);
-        player.score = 0;
         player.melds = [];
         io.to(player.socketId).emit("playerHand", { hand: player.hand });
       });
-
-      // startTurnTimer(io, roomId, activeGames);
-
-      // io.to(roomId).emit("gameStarted", {
-      //   message: "Game has started",
-      //   players: game.players.map((p) => ({
-      //     userId: p.userId,
-      //     userName: p.userName,
-      //     handSize: cardsPerPlayer,
-      //   })),
-      //   discardPile: game.discardPile,
-      //   currentPlayerIndex: game.currentPlayerIndex,
-      //   wildCard: game.wildCard,
-      //   // timeLeft: TURN_DURATION_SECONDS,
-      // });
 
       io.to(roomId).emit("gameStarted", {
         message: "Game has started",
@@ -176,6 +161,7 @@ module.exports = (io, socket) => {
           userId: p.userId,
           userName: p.userName,
           handSize: cardsPerPlayer,
+          score: p.score,
         })),
         discardPile: game.discardPile,
         currentPlayerIndex: game.currentPlayerIndex,
@@ -191,12 +177,10 @@ module.exports = (io, socket) => {
 
   socket.on("drawCard", async ({ drawFrom }) => {
     try {
-      // 1. Authentication check
       if (!socket.user?._id) {
         return socket.emit("turnError", { message: "Unauthorized access." });
       }
 
-      // 2. Get room ID from socket's joined rooms
       const roomId = Array.from(socket.rooms).find(
         (room) => room !== socket.id
       );
@@ -208,7 +192,6 @@ module.exports = (io, socket) => {
       const game = activeGames[roomId];
       const userId = socket.user._id;
 
-      // 3. Find player and validate turn
       const player = game.players.find((p) => p.userId === userId);
       if (!player) {
         return socket.emit("turnError", { message: "Player not found." });
@@ -224,7 +207,6 @@ module.exports = (io, socket) => {
         });
       }
 
-      // 4. Handle deck reshuffling if needed
       if (game.deck.length === 0 && game.discardPile.length > 1) {
         const reshufflePile = game.discardPile.slice(0, -1);
         game.deck = shuffleDeck(reshufflePile);
@@ -238,7 +220,6 @@ module.exports = (io, socket) => {
         });
       }
 
-      // 5 Draw card logic
       let drawnCard;
       if (drawFrom === "deck") {
         if (!game.deck.length)
@@ -252,11 +233,9 @@ module.exports = (io, socket) => {
         return socket.emit("turnError", { message: "Invalid draw source" });
       }
 
-      // 6. Update game state
       player.drawn = true;
       player.hand.push(drawnCard);
 
-      // 7. Emit updates
       io.to(player.socketId).emit("cardDrawn", {
         drawnCard,
         hand: player.hand,
@@ -278,263 +257,76 @@ module.exports = (io, socket) => {
     }
   });
 
-  socket.on("layDownMelds", async ({ melds }) => {                
-    console.log("Received meld:", melds);
+  // socket.on("discardCard", async ({ card }) => {
+  // try {
+  //   if (!socket.user?._id) {
+  //     return socket.emit("turnError", { message: "Unauthorized access." });
+  //   }
+  //   const roomId = Array.from(socket.rooms).find(
+  //     (room) => room !== socket.id
+  //   );
 
-    try {
-      if (!socket.user?._id) {
-        return socket.emit("turnError", { message: "Unauthorized access." });
-      }
+  //   if (!roomId || !activeGames[roomId]) {
+  //     return socket.emit("turnError", {
+  //     message: "You're not in an active game.",
+  //     });
+  //   }
 
-      const roomId = Array.from(socket.rooms).find(
-        (room) => room !== socket.id
-      );
+  //   const game = activeGames[roomId];
+  //   const userId = socket.user._id;
 
-      if (!roomId || !activeGames[roomId]) {
-        return socket.emit("turnError", {
-          message: "You're not in an active game.",
-        });
-      }
+  //   const player = game.players.find((p) => p.userId === userId);
+  //   if (!player) {
+  //     return socket.emit("turnError", { message: "Player data not found." });
+  //   }
 
-      const game = activeGames[roomId];
-      const userId = socket.user._id;
+  //    if (!player.drawn) {
+  //     return socket.emit("turnError", { message: "You must draw a card before discarding." });
+  //    }
 
-      const player = game.players.find((p) => p.userId === userId);
-      if (!player) {
-        socket.emit("error", { message: "Player not found." });
-        return;
-      }
+  //    if (player.discarded) {
+  //     return socket.emit("turnError", {
+  //       message: "Already discarded this turn.",
+  //     });
+  //   }
 
-      if (game.players[game.currentPlayerIndex].userId !== userId) {
-        socket.emit("turnError", { message: "It's not your turn." });
-        return;
-      }
+  //   if (game.players[game.currentPlayerIndex].userId !== userId) {
+  //     return socket.emit("turnError", { message: "It's not your turn." });
+  //   }
 
-      if (!Array.isArray(melds) || melds.length === 0) {
-        socket.emit("turnError", { message: "Invalid melds format." });
-        return;
-      }
-      console.log("Player's hand before melding:", player.hand);
+  //   const cardIndex = player.hand.findIndex((c) => c.trim() === card.trim());
+  //   if (cardIndex === -1) {
+  //     return socket.emit("turnError", { message: "Card not found in hand." });
+  //   }
 
-      let remainingCards = [...player.hand];
+  //   const discardedCard = player.hand.splice(cardIndex, 1)[0];
+  //   game.discardPile.unshift(discardedCard);
+  //   player.discarded = true;
 
-      const allMeldCards = melds.flat();
-      console.log("All cards in melds:", allMeldCards);
+  //   io.to(roomId).emit("updateDiscardPile", game.discardPile);
+  //   io.to(player.socketId).emit("updateHand", player.hand);
 
-      for (const meldCard of allMeldCards) {
-        const cardIndex = remainingCards.findIndex(
-          (handCard) => handCard.trim() === meldCard.trim()
-        );
+  //   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+  //   const nextPlayer = game.players[game.currentPlayerIndex];
+  //   nextPlayer.drawn = false;
+  //   nextPlayer.discarded = false;
 
-        if (cardIndex === -1) {
-          console.log(`Card ${meldCard} not found in player's hand`);
-          socket.emit("turnError", {
-            message: `Card ${meldCard} not found in your hand.`,
-          });
-          return;
-        }
-        remainingCards.splice(cardIndex, 1);
-      }
+  //   io.to(roomId).emit("turnEnded", {
+  //     message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
+  //     currentPlayerId: nextPlayer.userId,
+  //   });
 
-      // Validate all melds
-      for (const meld of melds) {
-        if (!isValidMeld(meld, game.wildCard)) {
-          socket.emit("turnError", { message: "Invalid meld detected." });
-          return;
-        }
-      }
+  //   io.to(nextPlayer.socketId).emit("yourTurn", {
+  //     message: `It's your turn, ${nextPlayer.userName}`,
+  //   });
 
-      if (!player.melds) player.melds = [];
-      player.melds.push(...melds);
+  //   console.log("Discarded:", card, "by", player.userName);
+  // } catch (error) {
+  //   console.error("Discard card error:", error);
+  //   socket.emit("turnError", { message: "Failed to discard card" });
+  // }
+  // });
 
-      // Update player's hand with remaining cards
-      player.hand = remainingCards;
-      console.log("Player's hand after melding:", player.hand);
-
-      const updatedUser = await updateMelds(userId, {
-        $set: { melds: player.melds },
-      });
-      console.log("User updated with melds:", updatedUser);
-
-      // Emit updated hand to player
-      io.to(player.socketId).emit("updateHand", player.hand);
-
-      // Check if this was a complete meld (all cards except one for discard)
-      if (player.hand.length === 1) {
-        console.log(
-          "Player has one card left after melds! Awaiting discard to win."
-        );
-      } else if (player.hand.length === 0) {
-        console.log(
-          "Player has no cards left after melds! Declaring winner:",
-          userId
-        );
-        player.score = 0;
-
-        await User.findByIdAndUpdate(
-          userId,
-          { $inc: { gamesWon: 1 } },
-          { new: true }
-        );
-
-        game.players.forEach((p) => {
-          if (p.userId !== userId) {
-            p.score = calculatePenaltyPoints(
-              p.hand,
-              game.wildCard,
-              p.melds || []
-            );
-          }
-        });
-
-        io.to(roomId).emit("gameOver", {
-          winner: userId,
-          scores: game.players.map((p) => ({
-            playerId: p.userId,
-            score: p.score,
-          })),
-        });
-
-        cleanupTimers(roomId);
-        delete activeGames[roomId];
-        return;
-      }
-
-      io.to(roomId).emit("meldsLaidDown", {
-        playerId: userId,
-        melds: player.melds,
-      });
-    } catch (error) {
-      console.error("Error in layDownMelds event:", error);
-      socket.emit("turnError", { message: "An unexpected error occurred." });
-    }
-  });
-
-  /* socket.on("discardCard", async ({ card }) => {
-    try {
-      if (!socket.user?._id) {
-        return socket.emit("turnError", { message: "Unauthorized access." });
-      }
-      const roomId = Array.from(socket.rooms).find(
-        (room) => room !== socket.id
-      );
-  
-      if (!roomId || !activeGames[roomId]) {
-        return socket.emit("turnError", {
-          message: "You're not in an active game.",
-        });
-      }
-      const game = activeGames[roomId];
-      const userId = socket.user._id;
-  
-      const player = game.players.find((p) => p.userId === userId);
-      if (!player) {
-        return socket.emit("turnError", { message: "Player data not found." });
-      }
-  
-      if (player.discarded) {
-        return socket.emit("turnError", {
-          message: "Already discarded this turn.",
-        });
-      }
-  
-      if (game.players[game.currentPlayerIndex].userId !== userId) {
-        return socket.emit("turnError", { message: "It's not your turn." });
-      }
-  
-      // Modified this condition to allow discarding without drawing if player has melded
-      if (!player.drawn && player.hand.length > 1 && !player.melds?.length) {
-        return socket.emit("turnError", {
-          message: "You must draw a card before discarding.",
-        });
-      }
-  
-      // Log player's hand before discarding
-      console.log("Player's hand before discarding:", player.hand);
-      console.log("Card to discard:", card);
-      
-      const cardIndex = player.hand.findIndex((c) => c.trim() === card.trim());
-      if (cardIndex === -1) {
-        return socket.emit("turnError", { message: "Card not found in hand." });
-      }
-  
-      const discardedCard = player.hand.splice(cardIndex, 1)[0];
-      game.discardPile.unshift(discardedCard);
-      player.discarded = true;
-  
-      // Log player's hand after discarding
-      console.log("Player's hand after discarding:", player.hand);
-  
-      io.to(roomId).emit("updateDiscardPile", game.discardPile);
-      io.to(player.socketId).emit("updateHand", player.hand);
-  
-      // Check if player has won after discarding the last card
-      if (player.hand.length === 0) {
-        console.log("Player has discarded their last card! Declaring winner:", player.userId);
-        
-        // For final verification, log the player's melds to check if they're valid
-        console.log("Player's final melds:", player.melds);
-        
-        player.score = 0;
-  
-        await User.findByIdAndUpdate(
-          player.userId,
-          {
-            $inc: { gamesWon: 1 },
-            currentGameStatus: "finished",
-          },
-          { new: true }
-        );
-        game.players.forEach((p) => {
-          if (p.userId !== player.userId) {
-            p.score = calculatePenaltyPoints(p.hand, game.wildCard);
-          }
-        });
-  
-        io.to(roomId).emit("gameOver", {
-          winner: player.userId,
-          scores: game.players.map((p) => ({
-            playerId: p.userId,
-            score: p.score,
-          })),
-        });
-  
-        cleanupTimers(roomId);
-        delete activeGames[roomId];
-        return;
-      }
-  
-      // Update the current player index
-      game.currentPlayerIndex =
-        (game.currentPlayerIndex + 1) % game.players.length;
-      const nextPlayer = game.players[game.currentPlayerIndex];
-  
-      nextPlayer.drawn = false;
-      nextPlayer.discarded = false;
-  
-      io.to(roomId).emit("turnEnded", {
-        message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
-        currentPlayerId: nextPlayer.userId,
-      });
-  
-      io.to(nextPlayer.socketId).emit("yourTurn", {
-        message: `It's your turn, ${nextPlayer.userName}`,
-      });
-  
-      await User.findByIdAndUpdate(
-        userId,
-        { score: player.score },
-        { new: true }
-      );
-  
-      console.log("Discarded:", card, "by", player.userName);
-    } catch (error) {
-      console.error("Discard card error:", error);
-      socket.emit("turnError", { message: "Failed to discard card" });
-    }
-  }); */
-
-                /* 5-5-25 */
   socket.on("discardCard", async ({ card }) => {
     try {
       if (!socket.user?._id) {
@@ -549,12 +341,19 @@ module.exports = (io, socket) => {
           message: "You're not in an active game.",
         });
       }
+
       const game = activeGames[roomId];
       const userId = socket.user._id;
 
       const player = game.players.find((p) => p.userId === userId);
       if (!player) {
         return socket.emit("turnError", { message: "Player data not found." });
+      }
+
+      if (!player.drawn) {
+        return socket.emit("turnError", {
+          message: "You must draw a card before discarding.",
+        });
       }
 
       if (player.discarded) {
@@ -567,18 +366,8 @@ module.exports = (io, socket) => {
         return socket.emit("turnError", { message: "It's not your turn." });
       }
 
-      // Modified this condition to allow discarding without drawing if player has melded
-      if (!player.drawn && player.hand.length > 1 && !player.melds?.length) {
-        return socket.emit("turnError", {
-          message: "You must draw a card before discarding.",
-        });
-      }
-
-      // Log player's hand before discarding
-      console.log("Player's hand before discarding:", player.hand);
-      console.log("Card to discard:", card);
-
       const cardIndex = player.hand.findIndex((c) => c.trim() === card.trim());
+
       if (cardIndex === -1) {
         return socket.emit("turnError", { message: "Card not found in hand." });
       }
@@ -587,57 +376,117 @@ module.exports = (io, socket) => {
       game.discardPile.unshift(discardedCard);
       player.discarded = true;
 
-      // Log player's hand after discarding
-      console.log("Player's hand after discarding:", player.hand);
-
       io.to(roomId).emit("updateDiscardPile", game.discardPile);
       io.to(player.socketId).emit("updateHand", player.hand);
 
-      if (["pool61", "pool101", "pool201"].includes(game.gameType)) {
-        if (player.score >= game.poolLimit) {
-          console.log(
-            `Player ${player.userName} eliminated for exceeding pool limit.`
-          );
-          game.players = game.players.filter((p) => p.userId !== userId);
+      if (player.hand.length === 0) {
+        const hasPure = hasPureSequence(player.melds, game.wildCard);
+        const totalSequences = countSequences(player.melds, game.wildCard);
 
-          io.to(roomId).emit("playerEliminated", {
-            playerId: userId,
-            message: `${player.userName} has been eliminated for exceeding the pool limit.`,
-          });
+        if (hasPure && totalSequences >= 2) {
+          player.score += 0;
 
-          if (game.players.length === 1) {
-            const winner = game.players[0];
-            io.to(roomId).emit("gameOver", {
-              winner: winner.userId,
-              message: `${winner.userName} wins the game!`,
+          for (const p of game.players) {
+            if (p.userId !== userId) {
+              p.score += Math.min(
+                calculatePenaltyPoints(p.hand, game.wildCard, p.melds || []),
+                80
+              );
+            }
+          }
+
+          for (const p of game.players) {
+            await updateUser(p.userId, {
+              score: p.score,
+              currentGameStatus: "playing",
             });
-            delete activeGames[roomId];
+          }
+
+          if (["pool61", "pool101", "pool201"].includes(game.gameType)) {
+            const poolLimit = game.poolLimit;
+            const eliminatedPlayers = game.players.filter(
+              (p) => p.score >= poolLimit
+            );
+
+            // Remove eliminated players
+            game.players = game.players.filter((p) => p.score < poolLimit);
+
+            // Notify about eliminations
+            if (eliminatedPlayers.length > 0) {
+              io.to(roomId).emit("playerEliminated", {
+                eliminated: eliminatedPlayers.map((p) => ({
+                  playerId: p.userId,
+                  userName: p.userName,
+                })),
+                message: `${eliminatedPlayers
+                  .map((p) => p.userName)
+                  .join(", ")} eliminated for exceeding pool limit.`,
+              });
+
+              // Update database for eliminated players
+              for (const p of eliminatedPlayers) {
+                await updateUser(p.userId, {
+                  currentGameStatus: "finished",
+                });
+              }
+            }
+
+            // Check if only one player remains
+            if (game.players.length === 1) {
+              const winner = game.players[0];
+              await updateUser(winner.userId, {
+                $inc: { gamesWon: 1 },
+                currentGameStatus: "finished",
+              });
+
+              io.to(roomId).emit("gameOver", {
+                gameStatus: "ended",
+                winner: winner.userId,
+                message: `${winner.userName} wins the Pool Rummy game!`,
+                scores: game.players.concat(eliminatedPlayers).map((p) => ({
+                  playerId: p.userId,
+                  score: p.score,
+                })),
+              });
+
+              delete activeGames[roomId];
+              return;
+            }
+
+            // Start next round
+            game.round += 1;
+            resetGameForNextRound(game, io, roomId);
             return;
           }
-        }
-      }
 
-      // Check if player has melds and if they meet winning conditions when discarding last card
-      if (player.hand.length === 0) {
-        console.log(
-          "Player has discarded their last card! Checking win conditions:",
-          player.userId
-        );
+          // Point Rummy logic
+          await updateUser(userId, {
+            $inc: { gamesWon: 1 },
+            currentGameStatus: "finished",
+          });
 
-        // For final verification, log the player's melds to check if they're valid
-        console.log("Player's final melds:", player.melds);
+          for (const p of game.players) {
+            if (p.userId !== userId) {
+              await updateUser(p.userId, {
+                currentGameStatus: "finished",
+              });
+            }
+          }
 
-        // Check if player has the required melds to win
-        const hasPure = hasPureSequence(player.melds || [], game.wildCard);
-        const totalSequences = countSequences(
-          player.melds || [],
-          game.wildCard
-        );
+          io.to(roomId).emit("gameOver", {
+            gameStatus: "ended",
+            winner: userId,
+            message: `${player.userName} wins the game!`,
+            scores: game.players.map((p) => ({
+              playerId: p.userId,
+              score: p.score,
+            })),
+          });
 
-        if (!hasPure || totalSequences < 2) {
-          console.log("Wrong Declaration by player:", userId);
-
-          // Calculate penalty for wrong declaration
+          delete activeGames[roomId];
+          return;
+        } else {
+          // Invalid show - player has no cards but doesn't meet win conditions
           const wrongPenalty = Math.min(
             calculatePenaltyPoints(
               player.hand.concat(player.melds.flat()),
@@ -647,126 +496,277 @@ module.exports = (io, socket) => {
             80
           );
 
-          player.score = wrongPenalty;
+          player.score += wrongPenalty;
+
+          await updateUser(player.userId, {
+            score: player.score,
+            currentGameStatus: "playing",
+          });
+
+          io.to(roomId).emit("wrongDeclaration", {
+            playerId: userId,
+            penaltyPoints: wrongPenalty,
+          });
+        }
+      }
+
+      // Only proceed to next turn if game hasn't ended
+      if (activeGames[roomId]) {
+        game.currentPlayerIndex =
+          (game.currentPlayerIndex + 1) % game.players.length;
+        const nextPlayer = game.players[game.currentPlayerIndex];
+        nextPlayer.drawn = false;
+        nextPlayer.discarded = false;
+
+        io.to(roomId).emit("turnEnded", {
+          message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
+          currentPlayerId: nextPlayer.userId,
+        });
+
+        io.to(nextPlayer.socketId).emit("yourTurn", {
+          message: `It's your turn, ${nextPlayer.userName}`,
+        });
+      }
+
+      console.log("Discarded:", card, "by", player.userName);
+    } catch (error) {
+      console.error("Discard card error:", error);
+      socket.emit("turnError", { message: "Failed to discard card" });
+    }
+  });
+
+  socket.on("layDownMelds", async ({ melds }) => {
+    try {
+      if (!socket.user?._id) {
+        return socket.emit("turnError", { message: "Unauthorized access." });
+      }
+
+      const roomId = Array.from(socket.rooms).find(
+        (room) => room !== socket.id
+      );
+
+      if (!roomId || !activeGames[roomId]) {
+        return socket.emit("turnError", {
+          message: "You're not in an active game.",
+        });
+      }
+
+      const game = activeGames[roomId];
+      const userId = socket.user._id;
+
+      const player = game.players.find((p) => p.userId === userId);
+      if (!player) {
+        return socket.emit("turnError", { message: "Player not found." });
+      }
+
+      if (game.players[game.currentPlayerIndex].userId !== userId) {
+        return socket.emit("turnError", { message: "It's not your turn." });
+      }
+
+      if (!Array.isArray(melds) || melds.length === 0) {
+        return socket.emit("turnError", { message: "Invalid melds format." });
+      }
+
+      const remainingCards = [...player.hand];
+      const allMeldCards = melds.flat();
+
+      for (const meldCard of allMeldCards) {
+        const cardIndex = remainingCards.findIndex(
+          (handCard) => handCard.trim() === meldCard.trim()
+        );
+        if (cardIndex === -1) {
+          return socket.emit("turnError", {
+            message: `Card ${meldCard} not found in your hand.`,
+          });
+        }
+        remainingCards.splice(cardIndex, 1);
+      }
+
+      for (const meld of melds) {
+        if (!isValidMeld(meld, game.wildCard)) {
+          return socket.emit("turnError", {
+            message: "Invalid meld detected.",
+          });
+        }
+      }
+
+      player.melds.push(...melds);
+      player.hand = remainingCards;
+
+      // Update database with melds
+      await updateUser(userId, { melds: player.melds });
+
+      if (player.hand.length === 0) {
+        const hasPure = hasPureSequence(player.melds, game.wildCard);
+        const totalSequences = countSequences(player.melds, game.wildCard);
+
+        if (!hasPure || totalSequences < 2) {
+          const wrongPenalty = Math.min(
+            calculatePenaltyPoints(
+              player.hand.concat(player.melds.flat()),
+              game.wildCard,
+              []
+            ),
+            80
+          );
+
+          player.score += wrongPenalty;
+
+          await updateUser(player.userId, {
+            score: player.score,
+            currentGameStatus: "playing",
+          });
 
           io.to(roomId).emit("wrongDeclaration", {
             playerId: userId,
             penaltyPoints: wrongPenalty,
           });
 
-          await User.findByIdAndUpdate(
-            userId,
-            {
-              $inc: { wrongDeclarations: 1 },
-              $set: { score: wrongPenalty, currentGameStatus: "finished" },
-            },
-            { new: true }
-          );
+          // End turn, no game over
+          // game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+          // const nextPlayer = game.players[game.currentPlayerIndex];
+          // nextPlayer.drawn = false;
+          // nextPlayer.discarded = false;
 
-          game.players.forEach((p) => {
-            if (p.userId !== userId) {
-              p.score = 0;
-            }
-          });
+          // io.to(roomId).emit("turnEnded", {
+          //   message: `Wrong declaration by ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
+          //   currentPlayerId: nextPlayer.userId,
+          // });
 
-          io.to(roomId).emit("gameOver", {
-            winner: null,
-            wrongDeclarer: userId,
-            scores: game.players.map((p) => ({
-              playerId: p.userId,
-              score: p.score,
-            })),
-          });
-
-          cleanupTimers(roomId);
-          delete activeGames[roomId];
-          return;
+          // io.to(nextPlayer.socketId).emit("yourTurn", {
+          //   message: `It's your turn, ${nextPlayer.userName}`,
+          // });
+          // return;
         }
 
-        // Player has valid melds and has discarded their last card - they win!
-        player.score = 0;
+        // Valid show
+        player.score += 0;
 
-        await User.findByIdAndUpdate(
-          player.userId,
-          {
-            $inc: { gamesWon: 1 },
-            $set: { score: 0, currentGameStatus: "finished" },
-          },
-          { new: true }
-        );
-
-        // Calculate scores for other players, considering their valid melds
+        // Calculate scores for other players
         for (const p of game.players) {
-          if (p.userId !== player.userId) {
-            // Use the fixed penalty calculation
-            p.score = calculatePenaltyPoints(
-              p.hand,
-              game.wildCard,
-              p.melds || []
-            );
-            console.log(
-              `Calculated score for player ${p.userId}: ${p.score} points`
-            );
-
-            // Update losing player's score in database
-            await User.findByIdAndUpdate(
-              p.userId,
-              {
-                $set: {
-                  score: p.score,
-                  currentGameStatus: "finished",
-                },
-              },
-              { new: true }
-            ).catch((err) =>
-              console.error("Error updating losing player score:", err)
+          if (p.userId !== userId) {
+            p.score += Math.min(
+              calculatePenaltyPoints(p.hand, game.wildCard, p.melds || []),
+              80
             );
           }
         }
 
-        // Log the final scores before sending to clients
-        console.log(
-          "Final scores:",
-          game.players.map((p) => ({
-            playerId: p.userId,
+        // Update database with scores
+        for (const p of game.players) {
+          await updateUser(p.userId, {
             score: p.score,
-          }))
-        );
+            currentGameStatus: "playing",
+          });
+        }
+
+        if (["pool61", "pool101", "pool201"].includes(game.gameType)) {
+          const poolLimit = game.poolLimit;
+          const eliminatedPlayers = game.players.filter(
+            (p) => p.score >= poolLimit
+          );
+
+          // Remove eliminated players
+          game.players = game.players.filter((p) => p.score < poolLimit);
+
+          // Notify about eliminations
+          if (eliminatedPlayers.length > 0) {
+            io.to(roomId).emit("playerEliminated", {
+              eliminated: eliminatedPlayers.map((p) => ({
+                playerId: p.userId,
+                userName: p.userName,
+              })),
+              message: `${eliminatedPlayers
+                .map((p) => p.userName)
+                .join(", ")} eliminated for exceeding pool limit.`,
+            });
+
+            // Update database for eliminated players
+            for (const p of eliminatedPlayers) {
+              await updateUser(p.userId, {
+                currentGameStatus: "finished",
+              });
+            }
+          }
+
+          // Check if only one player remains
+          if (game.players.length === 1) {
+            const winner = game.players[0];
+            await updateUser(winner.userId, {
+              $inc: { gamesWon: 1 },
+              currentGameStatus: "finished",
+            });
+
+            io.to(roomId).emit("gameOver", {
+              gameStatus: "ended",
+              winner: winner.userId,
+              message: `${winner.userName} wins the Pool Rummy game!`,
+              scores: game.players.concat(eliminatedPlayers).map((p) => ({
+                playerId: p.userId,
+                score: p.score,
+              })),
+            });
+
+            delete activeGames[roomId];
+            return;
+          }
+
+          // Start next round
+          game.round += 1;
+          resetGameForNextRound(game, io, roomId);
+          return;
+        }
+
+        // Point Rummy logic
+        await updateUser(userId, {
+          $inc: { gamesWon: 1 },
+          currentGameStatus: "finished",
+        });
+
+        for (const p of game.players) {
+          if (p.userId !== userId) {
+            await updateUser(p.userId, {
+              currentGameStatus: "finished",
+            });
+          }
+        }
 
         io.to(roomId).emit("gameOver", {
-          winner: player.userId,
+          gameStatus: "ended",
+          winner: userId,
           scores: game.players.map((p) => ({
             playerId: p.userId,
             score: p.score,
           })),
         });
 
-        cleanupTimers(roomId);
         delete activeGames[roomId];
         return;
       }
 
-      // Continue with regular turn flow if game hasn't ended
-      game.currentPlayerIndex =
-        (game.currentPlayerIndex + 1) % game.players.length;
-      const nextPlayer = game.players[game.currentPlayerIndex];
+      // Notify about melds laid down (not a show)
+      io.to(roomId).emit("meldsLaidDown", {
+        playerId: userId,
+        melds: player.melds,
+      });
 
-      nextPlayer.drawn = false;
-      nextPlayer.discarded = false;
+      // End turn
+      // game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      // const nextPlayer = game.players[game.currentPlayerIndex];
+      // nextPlayer.drawn = false;
+      // nextPlayer.discarded = false;
 
       io.to(roomId).emit("turnEnded", {
-        message: `Turn ended for ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
+        message: `Melds laid down by ${player.userName}. Now it's ${nextPlayer.userName}'s turn`,
         currentPlayerId: nextPlayer.userId,
       });
 
       io.to(nextPlayer.socketId).emit("yourTurn", {
         message: `It's your turn, ${nextPlayer.userName}`,
       });
-
-      console.log("Discarded:", card, "by", player.userName);
     } catch (error) {
-      console.error("Discard card error:", error);
-      socket.emit("turnError", { message: "Failed to discard card" });
+      console.error("Error in layDownMelds event:", error);
+      socket.emit("turnError", { message: "An unexpected error occurred." });
     }
   });
 
@@ -835,7 +835,6 @@ module.exports = (io, socket) => {
       // Remove player from active game
       game.players.splice(playerIndex, 1);
 
-      // Handle game end if only 1 player remains
       if (game.players.length === 1) {
         const winner = game.players[0];
 
@@ -858,13 +857,11 @@ module.exports = (io, socket) => {
         return;
       }
 
-      // Cleanup if no players left (unlikely case)
       if (game.players.length === 0) {
         delete activeGames[roomId];
         return;
       }
 
-      // Continue game with remaining players
       io.to(roomId).emit("gameContinues", {
         message: "The game continues with the remaining players.",
         remainingPlayers: game.players.map((p) => ({
@@ -879,8 +876,52 @@ module.exports = (io, socket) => {
     }
   });
 
+  // socket.on("leaveRoom", () => {
+  //   console.log(`GameEvent: User disconnected: ${socket.id}`);
+
+  //   for (const roomId in activeGames) {
+  //     const game = activeGames[roomId];
+  //     const playerIndex = game.players.findIndex(
+  //       (p) => p.socketId === socket.id
+  //     );
+
+  //     if (playerIndex !== -1) {
+  //       const leavingPlayer = game.players[playerIndex];
+  //       game.players.splice(playerIndex, 1);
+
+  //       // clearTimeout(game.turnTimer);
+  //       // clearTimeout(game.warningTimer);
+
+  //       if (game.players.length === 1) {
+  //         const winner = game.players[0];
+
+  //         io.to(winner.socketId).emit("gameOver", {
+  //           message: `🎉 You win ${leavingPlayer.userName} left the game.`,
+  //           winnerId: winner.userId,
+  //         });
+
+  //         console.log(
+  //           ` ${winner.userName} wins. ${leavingPlayer.userName} left.`
+  //         );
+
+  //         delete activeGames[roomId];
+  //       } else if (game.players.length === 0) {
+  //         delete activeGames[roomId];
+  //       } else {
+  //         io.to(roomId).emit("playerLeft", {
+  //           message: `${leavingPlayer.userName} left the game.`,
+  //           playerId: leavingPlayer.userId,
+  //         });
+  //       }
+
+  //       break;
+  //     }
+  //   }
+  // });
+
   socket.on("leaveRoom", () => {
     console.log(`GameEvent: User disconnected: ${socket.id}`);
+
     for (const roomId in activeGames) {
       const game = activeGames[roomId];
       const playerIndex = game.players.findIndex(
@@ -891,19 +932,30 @@ module.exports = (io, socket) => {
         const leavingPlayer = game.players[playerIndex];
         game.players.splice(playerIndex, 1);
 
-        // clearTimeout(game.turnTimer);
-        // clearTimeout(game.warningTimer);
+        if (playerIndex < game.currentPlayerIndex) {
+          game.currentPlayerIndex -= 1;
+        } else if (playerIndex === game.currentPlayerIndex) {
+          if (game.players.length > 0) {
+            if (game.currentPlayerIndex >= game.players.length) {
+              game.currentPlayerIndex = 0;
+            }
+
+            const nextPlayer = game.players[game.currentPlayerIndex];
+            io.to(nextPlayer.socketId).emit("yourTurn", {
+              message: "It's your turn!",
+            });
+          }
+        }
 
         if (game.players.length === 1) {
           const winner = game.players[0];
 
           io.to(winner.socketId).emit("gameOver", {
-            message: `🎉 You win ${leavingPlayer.userName} left the game.`,
+            message: `🎉 You win! ${leavingPlayer.userName} left the game.`,
             winnerId: winner.userId,
           });
-
           console.log(
-            ` ${winner.userName} wins. ${leavingPlayer.userName} left.`
+            `${winner.userName} wins. ${leavingPlayer.userName} left.`
           );
 
           delete activeGames[roomId];
@@ -920,7 +972,5 @@ module.exports = (io, socket) => {
       }
     }
   });
-
   socket.on("disconnect", () => {});
 };
-
