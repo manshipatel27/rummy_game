@@ -35,7 +35,7 @@ module.exports = (io, socket) => {
       const totalPrizePool = game.prizePool || 0;
       const winnerPrize = Math.floor(totalPrizePool * 0.9); // 90% to winner
   
-      // 💰 Distribute prize to winner
+      // 💰 Distribute prize to win    ner
       if (totalPrizePool > 0) {
         const winner = await User.findById(winnerId);
         if (winner) {
