@@ -8,8 +8,9 @@ exports.initSocket = (server) => {
   try {
     const io = new Server(server, {
       cors: {
-        origin: "*",
+        origin: process.env.CORS_ORIGIN ,
         methods: ["GET", "POST"],
+        credentials: true
       },
     });
 
@@ -17,8 +18,8 @@ exports.initSocket = (server) => {
     //  Middelware for authentication.
     io.use(async (socket, next) => {
       try {
-        // const token = socket.handshake.auth?.token;
-        const token = socket.handshake.headers['auth'];
+        const token = socket.handshake.auth?.token;  //for react 
+        // const token = socket.handshake.headers['auth'];  //for the postman 
         console.log(`token ==> ${token}`);
 
         if (!token) {
@@ -43,7 +44,6 @@ exports.initSocket = (server) => {
         next(new Error("Unauthorized socket connection"));
       }
     });
-     
     
     io.on("connection", (socket) => {
       console.log(`✅ User connected: ${socket.id} | Name: ${socket.user.name}`);

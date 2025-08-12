@@ -1,6 +1,8 @@
-const suits = ["♠️", "♥️", "♦️", "♣️"];
+// const suits = ["♠️", "♥️", "♦️", "♣️"];
+const suits = ["S", "H", "D", "C"]; 
 const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
-const jokers = ["🃏","🃏"];
+// const jokers = ["🃏","🃏"];
+const jokers = ["JOKER", "JOKER"];
 
 // function createDeck() {
 function createDeck(numDecks = 2) {
@@ -12,6 +14,7 @@ function createDeck(numDecks = 2) {
       }
     }
   }
+
   deck = deck.concat(jokers);
   return shuffleDeck(deck);
 }

@@ -18,14 +18,7 @@ const userSchema = new mongoose.Schema({
     required: true,
     // select: false
   },
-  dealScore: {
-    type: Number,
-    default: 0,
-  },
-  score: {
-    type: Number,
-    default: 0,
-  },
+  
   gamesPlayed: {
     type: Number,
     default: 0,
@@ -34,28 +27,44 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  currentGameStatus: {
-    type: String,
-    enum: ["waiting", "playing", "finished"],
-    default: "waiting",
+  wallet: {
+    type: Number,
+    default: 0,
   },
+
   createdAt: {
     type: Date,
     default: Date.now,
   },
-  melds: {
-    type: Array,    
-    default: [],
-  },
-  hasDropped: {
-    type: Boolean,
-    default: false,
-  },
-  dropType: {
-    type: String,
-    enum: ['first', 'middle'],
-    default: null,
-  },
+ 
+  
 });
 
 module.exports = mongoose.model("User", userSchema);
+
+  // currentGameStatus: {
+  //   type: String,
+  //   enum: ["waiting", "playing", "finished"],
+  //   default: "waiting",
+  // },
+   // melds: {
+  //   type: Array,    
+  //   default: [],
+  // },
+  // hasDropped: {
+  //   type: Boolean,
+  //   default: false,
+  // },
+  // dropType: {
+  //   type: String,
+  //   enum: ['first', 'middle'],
+  //   default: null,
+  // },
+  // dealScore: {
+    //   type: Number,
+    //   default: 0,
+    // },
+    // score: {
+    //   type: Number,
+    //   default: 0,
+    // },
