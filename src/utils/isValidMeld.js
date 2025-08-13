@@ -283,7 +283,7 @@ if (cardValue === "JOKER")
     }, 0);
 
     console.log("Total penalty points:", totalPoints);
-    return Math.min(totalPoints, 80);
+    return totalPoints;
   } catch (error) {
     console.error("Error calculating penalty points:", error);
     return 0;

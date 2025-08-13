@@ -57,13 +57,13 @@ module.exports = (io, socket) => {
         }
       }
   
-      // 🏆 Update winner stats
+      //  Update winner stats
       await updateUser(winnerId, {
         $inc: { gamesWon: 1 },
         currentGameStatus: "finished",
       });
   
-      // 🧮 Calculate penalty points for others
+      // Calculate penalty points for others
       for (const p of game.players) {
         if (p.userId === winnerId) {
           p.score = 0; // Winner has 0 penalty
@@ -79,7 +79,7 @@ module.exports = (io, socket) => {
         }
       }
   
-      // 🏁 Mark game as finished
+      // Mark game as finished
       game.winnerId = winnerId;
       game.winnerName = winnerName;
       game.prizeWon = winnerPrize;
@@ -125,143 +125,6 @@ module.exports = (io, socket) => {
     }
   };
   
-  
-
-  // const handleGameOver = async (roomId, winnerId, winnerName, game) => {
-  //   try {
-  //     const totalPrizePool = game.prizePool || 0;
-  //     const winnerPrize = Math.floor(totalPrizePool * 0.9); // 90% to winner, 10% platform fee
-  
-  //     // Distribute prize to winner
-  //     if (totalPrizePool > 0) {
-  //       const winner = await User.findById(winnerId);
-  //       if (winner) {
-  //         const newBalance = winner.wallet + winnerPrize;
-  
-  //         const transaction = {
-  //           type: "gameWin",
-  //           amount: winnerPrize,
-  //           balanceAfter: newBalance,
-  //           status: "success",
-  //           remarks: `Prize for winning game in room ${roomId}`,
-  //           timestamp: new Date(),
-  //         };
-  
-  //         await User.findByIdAndUpdate(winnerId, {
-  //           wallet: newBalance,
-  //           $push: { transactions: transaction }
-  //         });
-  //       }
-  //     }
-  
-  //     // Update winner stats
-  //     await updateUser(winnerId, {
-  //       $inc: { gamesWon: 1 },
-  //       currentGameStatus: "finished",
-  //     });
-  
-  //     // Update all other players
-  //     for (const p of game.players) {
-  //       if (p.userId !== winnerId) {
-  //         await updateUser(p.userId, {
-  //           currentGameStatus: "finished",
-  //         });
-  //       }
-  //     }
-  
-  //     // Mark game as finished
-  //     game.winnerId = winnerId;
-  //     game.winnerName = winnerName;
-  //     game.prizeWon = winnerPrize;
-  //     game.gameStatus = "finished";
-  
-  //     // Emit gameOver event
-  //     io.to(roomId).emit("gameOver", {
-  //       gameStatus: "ended",
-  //       winnerId,
-  //       winnerName,
-  //       prizeWon: winnerPrize,
-  //       message: `${winnerName} wins the game!`,
-  //       scores: game.players.map((p) => ({
-  //         playerId: p.userId,
-  //         score: p.score,
-  //       })),
-  //     });
-  
-  //     // Save final game state
-  //     await saveGameToMongo(roomId, game);
-  
-  //     // Cleanup
-  //     await delGame(roomId);
-  //     cleanupTimers(roomId);
-  
-  //   } catch (error) {
-  //     console.error("Error in handleGameOver:", error);
-  //   }
-  // };//21
-  
-
-
-
-
-  // const handleGameOver = async (roomId, winnerId, winnerName, game) => {
-  //   try {
-  //     // Calculate prize distribution
-  //     const totalPrizePool = game.prizePool || 0;
-  //     const winnerPrize = Math.floor(totalPrizePool * 0.9); // 90% to winner, 10% platform fee
-      
-  //     // Distribute prize if there's a prize pool
-  //     if (totalPrizePool > 0) {
-  //       socket.emit("distributePrize", { 
-  //         roomId, 
-  //         winnerId, 
-  //         winnerPrize 
-  //       });
-  //     }
-
-  //     // Update winner stats
-  //     await updateUser(winnerId, {
-  //       $inc: { gamesWon: 1 },
-  //       currentGameStatus: "finished",
-  //     });
-
-  //     // Update other players
-  //     for (const p of game.players) {
-  //       if (p.userId !== winnerId) {
-  //         await updateUser(p.userId, {
-  //           currentGameStatus: "finished",
-  //         });
-  //       }
-  //     }
-
-  //     game.winnerId = winnerId;
-  //     game.winnerName = winnerName;
-  //     game.prizeWon = winnerPrize;
-  //     game.gameStatus = "finished";
-
-  //     // Emit game over event
-  //     io.to(roomId).emit("gameOver", {
-  //       gameStatus: "ended",
-  //       winnerId,
-  //       message: `${winnerName} wins the game!`,
-  //       prizeWon: winnerPrize,
-  //       scores: game.players.map((p) => ({
-  //         playerId: p.userId,
-  //         score: p.score,
-  //       })),
-  //     });
-
-  //     await saveGameToMongo(roomId, game);
-
-  //     // Cleanup
-  //     await delGame(roomId);
-  //     cleanupTimers(roomId);
-      
-  //   } catch (error) {
-  //     console.error("Error in handleGameOver:", error);
-  //   }
-  // };
-
   async function processWalletTransaction(userId, amount, type, remarks) {
     const user = await User.findById(userId);
     if (!user) throw new Error('User not found');
@@ -286,252 +149,6 @@ module.exports = (io, socket) => {
     return newBalance;
   }
 
-  // socket.on("joinRoom", async ({ roomId, gameType = "pool101", poolLimit = null }) => {
-  //     try {
-  //       const { _id: userId, name: userName } = socket.user;
-  //       socket.userId = userId;
-  //       socket.roomId = roomId;
-  //       socket.join(roomId);
-
-  //     // Get or create game from Redis
-  //      let game = await getGame(roomId);
-  //       if (!game) {
-  //         game = {
-  //           players: [],
-  //           started: false,
-  //           createdAt: new Date(),
-  //           createdBy: userId.toString(),
-  //           gameType,
-  //           poolLimit,
-  //           round: 1,
-  //         };
-  //       }
-
-      
-
-  //       // if (game.players.length > 0 && game.gameType !== gameType) {
-  //       //   return socket.emit("turnError", {
-  //       //     message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
-  //       //   });
-  //       // }
-  //       if (
-  //         game.players.length > 0 &&
-  //         !(
-  //           (gameType === "point" && game.gameType === "point") ||
-  //           (gameType.startsWith("pool") && game.gameType.startsWith("pool"))
-  //         )
-  //       ) {
-  //         return socket.emit("turnError", {
-  //           message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
-  //         });
-  //       }
-        
-        
-
-  //       if (game.players.find((p) => p.userId == userId)) {
-  //         return socket.emit("turnError", {
-  //           message: "User already joined the room.",
-  //         });
-  //       }
-
-  //       if (game.players.length >= MAX_PLAYERS) {
-  //         return socket.emit("turnError", { message: "Room is full." });
-  //       }
-
-  //       const player = { userId, userName, socketId: socket.id, score: 0 };
-  //       game.players.push(player);
-
-  //       await updateUser(userId, { currentGameStatus: "waiting" });
-
-  //       //  Cache user in-game state in Redis
-  //       await setUserGameState(userId, {
-  //         currentGameStatus: "waiting",
-  //         hasDropped: false,
-  //         dropType: null,
-  //         melds: [],
-  //         score: 0,
-  //         dealScore: 0,
-  //       });
-
-  //       //  Save updated game to Redis
-  //       await setGame(roomId, game);
-
-  //       // const payload = {
-  //       //   players: game.players,
-  //       //   message: `${userName} has joined the room.`,
-  //       // };
-
-  //       // io.to(roomId).emit("userJoined", payload);
-  //       // io.to(roomId).emit("joinedRoom", { ...payload, roomId });
-
-  //       const roomData = {
-  //         roomId,
-  //         players: game.players,
-  //         gameType: game.gameType,
-  //         poolLimit: game.poolLimit,
-  //         round: game.round,
-  //         started: game.started,
-  //         createdAt: game.createdAt,
-  //         createdBy: game.createdBy,
-  //       };
-    
-  //       // ✅ 1. To joining player only:
-  //       socket.emit("joinedRoom", { room: roomData });
-    
-  //       // ✅ 2. To everyone in the room (including creator):
-  //       io.to(roomId).emit("roomUpdated", { room: roomData });
-
-        
-  //     } catch (err) {
-  //       console.error("joinRoom error:", err);
-  //       socket.emit("turnError", { message: "Unexpected error in joinRoom." });
-  //     }
-  //   }
-  // );
-
-
- 
-  // socket.on("joinRoom", async ({ roomId, gameType = "pool101", poolLimit = null, entryFee = 0 }) => {
-  //   try {
-  //     const { _id: userId, name: userName } = socket.user;
-      
-  //     if (!userId || !userName) {
-  //       return socket.emit("walletError", { message: "Unauthorized access." });
-  //     }
-
-  //     // Get user's current wallet balance
-  //     const user = await User.findById(userId);
-  //     if (!user) {
-  //       return socket.emit("walletError", { message: "User not found." });
-  //     }
-
-  //     // Check if user has sufficient balance
-  //     if (user.wallet < entryFee) {
-  //       return socket.emit("walletError", { 
-  //         message: `Insufficient balance. Required: ₹${entryFee}, Available: ₹${user.wallet}` 
-  //       });
-  //     }
-
-  //     socket.userId = userId;
-  //     socket.roomId = roomId;
-  //     socket.join(roomId);
-
-  //     // Get or create game from Redis
-  //     let game = await getGame(roomId);
-  //     if (!game) {
-  //       game = {
-  //         players: [],
-  //         started: false,
-  //         createdAt: new Date(),
-  //         createdBy: userId.toString(),
-  //         gameType,
-  //         poolLimit,
-  //         round: 1,
-  //         entryFee,
-  //         prizePool: 0,
-  //       };
-  //     }
-
-
-  //     // Validate game type compatibility
-  //     if (
-  //       game.players.length > 0 &&
-  //       !(
-  //         (gameType === "point" && game.gameType === "point") ||
-  //         (gameType.startsWith("pool") && game.gameType.startsWith("pool"))
-  //       )
-  //     ) {
-  //       return socket.emit("walletError", {
-  //         message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
-  //       });
-  //     }
-
-  //     // Check if user already joined
-  //     if (game.players.find((p) => p.userId == userId)) {
-  //       return socket.emit("walletError", {
-  //         message: "User already joined the room.",
-  //       });
-  //     }
-
-  //     // Check room capacity
-  //     if (game.players.length >= 4) {
-  //       return socket.emit("walletError", { message: "Room is full." });
-  //     }
-
-  //     // Deduct entry fee from wallet
-  //     const newBalance = user.wallet - entryFee;
-      
-  //     // Create transaction record
-  //     const transaction = {
-  //       type: "gameLoss",
-  //       amount: -entryFee,
-  //       balanceAfter: newBalance,
-  //       status: "success",
-  //       remarks: `Entry fee for room ${roomId}`,
-  //     };
-
-  //     // Update user wallet and add transaction
-  //     await User.findByIdAndUpdate(userId, {
-  //       wallet: newBalance,
-  //       currentGameStatus: "waiting",
-  //       $push: { transactions: transaction }
-  //     });
-
-  //     // Add player to game
-  //     const player = { 
-  //       userId, 
-  //       userName, 
-  //       socketId: socket.id, 
-  //       score: 0,
-  //       entryFeePaid: entryFee 
-  //     };
-  //     game.players.push(player);
-  //     game.prizePool += entryFee;
-
-  //     // Save user game state
-  //     await setUserGameState(userId, {
-  //       currentGameStatus: "waiting",
-  //       hasDropped: false,
-  //       dropType: null,
-  //       melds: [],
-  //       score: 0,
-  //       dealScore: 0,
-  //       entryFeePaid: entryFee,
-  //     });
-
-  //     // Save updated game to Redis
-  //     await setGame(roomId, game);
-
-  //     const roomData = {
-  //       roomId,
-  //       players: game.players,
-  //       gameType: game.gameType,
-  //       poolLimit: game.poolLimit,
-  //       round: game.round,
-  //       started: game.started,
-  //       createdAt: game.createdAt,
-  //       createdBy: game.createdBy,
-  //       entryFee: game.entryFee,
-  //       prizePool: game.prizePool,
-  //     };
-
-  //     // Emit to joining player
-  //     socket.emit("joinedPaidRoom", { 
-  //       room: roomData, 
-  //       walletBalance: newBalance,
-  //       message: `₹${entryFee} deducted from wallet. New balance: ₹${newBalance}`
-  //     });
-
-  //     // Emit to all players in room
-  //     io.to(roomId).emit("roomUpdated", { room: roomData });
-
-  //     console.log(`Player ${userName} joined paid room ${roomId} with entry fee ₹${entryFee}`);
-
-  //   } catch (error) {
-  //     console.error("joinPaidRoom error:", error);
-  //     socket.emit("walletError", { message: "Failed to join paid room." });
-  //   }
-  // }); //--->WITHOUT
   
   socket.on("joinRoom", async ({ roomId, gameType = "pool101" }) => {
     try {
@@ -987,8 +604,8 @@ if (!cardValue) {
       io.to(roomId).emit("updateDiscardPile", game.discardPile);
       io.to(player.socketId).emit("updateHand", player.hand);
 
-      console.log("📦 Player hand from backend:", player.hand);
-console.log("🔢 Player hand length:", player.hand.length);
+      console.log("Player hand from backend:", player.hand);
+console.log("Player hand length:", player.hand.length);
 
 // console.log("💡 Number of melds received from client:", melds.length);
 
@@ -1134,7 +751,7 @@ console.log("🔢 Player hand length:", player.hand.length);
       // }
 
       if (player.hand.length === 0) {  // updated
-        console.log("🏁 Empty hand detected - checking win conditions");
+        console.log("Empty hand detected - checking win conditions");
         console.log("Player melds:", JSON.stringify(player.melds, null, 2));
         console.log("Wild card:", game.wildCard);
         
@@ -2375,3 +1992,385 @@ for (const meldCard of allMeldCards) {
           poolLimit,
           round: 1,
         }); */
+
+
+        // socket.on("joinRoom", async ({ roomId, gameType = "pool101", poolLimit = null }) => {
+  //     try {
+  //       const { _id: userId, name: userName } = socket.user;
+  //       socket.userId = userId;
+  //       socket.roomId = roomId;
+  //       socket.join(roomId);
+
+  //     // Get or create game from Redis
+  //      let game = await getGame(roomId);
+  //       if (!game) {
+  //         game = {
+  //           players: [],
+  //           started: false,
+  //           createdAt: new Date(),
+  //           createdBy: userId.toString(),
+  //           gameType,
+  //           poolLimit,
+  //           round: 1,
+  //         };
+  //       }
+
+      
+
+  //       // if (game.players.length > 0 && game.gameType !== gameType) {
+  //       //   return socket.emit("turnError", {
+  //       //     message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
+  //       //   });
+  //       // }
+  //       if (
+  //         game.players.length > 0 &&
+  //         !(
+  //           (gameType === "point" && game.gameType === "point") ||
+  //           (gameType.startsWith("pool") && game.gameType.startsWith("pool"))
+  //         )
+  //       ) {
+  //         return socket.emit("turnError", {
+  //           message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
+  //         });
+  //       }
+        
+        
+
+  //       if (game.players.find((p) => p.userId == userId)) {
+  //         return socket.emit("turnError", {
+  //           message: "User already joined the room.",
+  //         });
+  //       }
+
+  //       if (game.players.length >= MAX_PLAYERS) {
+  //         return socket.emit("turnError", { message: "Room is full." });
+  //       }
+
+  //       const player = { userId, userName, socketId: socket.id, score: 0 };
+  //       game.players.push(player);
+
+  //       await updateUser(userId, { currentGameStatus: "waiting" });
+
+  //       //  Cache user in-game state in Redis
+  //       await setUserGameState(userId, {
+  //         currentGameStatus: "waiting",
+  //         hasDropped: false,
+  //         dropType: null,
+  //         melds: [],
+  //         score: 0,
+  //         dealScore: 0,
+  //       });
+
+  //       //  Save updated game to Redis
+  //       await setGame(roomId, game);
+
+  //       // const payload = {
+  //       //   players: game.players,
+  //       //   message: `${userName} has joined the room.`,
+  //       // };
+
+  //       // io.to(roomId).emit("userJoined", payload);
+  //       // io.to(roomId).emit("joinedRoom", { ...payload, roomId });
+
+  //       const roomData = {
+  //         roomId,
+  //         players: game.players,
+  //         gameType: game.gameType,
+  //         poolLimit: game.poolLimit,
+  //         round: game.round,
+  //         started: game.started,
+  //         createdAt: game.createdAt,
+  //         createdBy: game.createdBy,
+  //       };
+    
+  //       // ✅ 1. To joining player only:
+  //       socket.emit("joinedRoom", { room: roomData });
+    
+  //       // ✅ 2. To everyone in the room (including creator):
+  //       io.to(roomId).emit("roomUpdated", { room: roomData });
+
+        
+  //     } catch (err) {
+  //       console.error("joinRoom error:", err);
+  //       socket.emit("turnError", { message: "Unexpected error in joinRoom." });
+  //     }
+  //   }
+  // );
+
+
+ 
+  // socket.on("joinRoom", async ({ roomId, gameType = "pool101", poolLimit = null, entryFee = 0 }) => {
+  //   try {
+  //     const { _id: userId, name: userName } = socket.user;
+      
+  //     if (!userId || !userName) {
+  //       return socket.emit("walletError", { message: "Unauthorized access." });
+  //     }
+
+  //     // Get user's current wallet balance
+  //     const user = await User.findById(userId);
+  //     if (!user) {
+  //       return socket.emit("walletError", { message: "User not found." });
+  //     }
+
+  //     // Check if user has sufficient balance
+  //     if (user.wallet < entryFee) {
+  //       return socket.emit("walletError", { 
+  //         message: `Insufficient balance. Required: ₹${entryFee}, Available: ₹${user.wallet}` 
+  //       });
+  //     }
+
+  //     socket.userId = userId;
+  //     socket.roomId = roomId;
+  //     socket.join(roomId);
+
+  //     // Get or create game from Redis
+  //     let game = await getGame(roomId);
+  //     if (!game) {
+  //       game = {
+  //         players: [],
+  //         started: false,
+  //         createdAt: new Date(),
+  //         createdBy: userId.toString(),
+  //         gameType,
+  //         poolLimit,
+  //         round: 1,
+  //         entryFee,
+  //         prizePool: 0,
+  //       };
+  //     }
+
+
+  //     // Validate game type compatibility
+  //     if (
+  //       game.players.length > 0 &&
+  //       !(
+  //         (gameType === "point" && game.gameType === "point") ||
+  //         (gameType.startsWith("pool") && game.gameType.startsWith("pool"))
+  //       )
+  //     ) {
+  //       return socket.emit("walletError", {
+  //         message: `You cannot join this room with game type '${gameType}'. This room is already set to '${game.gameType}'.`,
+  //       });
+  //     }
+
+  //     // Check if user already joined
+  //     if (game.players.find((p) => p.userId == userId)) {
+  //       return socket.emit("walletError", {
+  //         message: "User already joined the room.",
+  //       });
+  //     }
+
+  //     // Check room capacity
+  //     if (game.players.length >= 4) {
+  //       return socket.emit("walletError", { message: "Room is full." });
+  //     }
+
+  //     // Deduct entry fee from wallet
+  //     const newBalance = user.wallet - entryFee;
+      
+  //     // Create transaction record
+  //     const transaction = {
+  //       type: "gameLoss",
+  //       amount: -entryFee,
+  //       balanceAfter: newBalance,
+  //       status: "success",
+  //       remarks: `Entry fee for room ${roomId}`,
+  //     };
+
+  //     // Update user wallet and add transaction
+  //     await User.findByIdAndUpdate(userId, {
+  //       wallet: newBalance,
+  //       currentGameStatus: "waiting",
+  //       $push: { transactions: transaction }
+  //     });
+
+  //     // Add player to game
+  //     const player = { 
+  //       userId, 
+  //       userName, 
+  //       socketId: socket.id, 
+  //       score: 0,
+  //       entryFeePaid: entryFee 
+  //     };
+  //     game.players.push(player);
+  //     game.prizePool += entryFee;
+
+  //     // Save user game state
+  //     await setUserGameState(userId, {
+  //       currentGameStatus: "waiting",
+  //       hasDropped: false,
+  //       dropType: null,
+  //       melds: [],
+  //       score: 0,
+  //       dealScore: 0,
+  //       entryFeePaid: entryFee,
+  //     });
+
+  //     // Save updated game to Redis
+  //     await setGame(roomId, game);
+
+  //     const roomData = {
+  //       roomId,
+  //       players: game.players,
+  //       gameType: game.gameType,
+  //       poolLimit: game.poolLimit,
+  //       round: game.round,
+  //       started: game.started,
+  //       createdAt: game.createdAt,
+  //       createdBy: game.createdBy,
+  //       entryFee: game.entryFee,
+  //       prizePool: game.prizePool,
+  //     };
+
+  //     // Emit to joining player
+  //     socket.emit("joinedPaidRoom", { 
+  //       room: roomData, 
+  //       walletBalance: newBalance,
+  //       message: `₹${entryFee} deducted from wallet. New balance: ₹${newBalance}`
+  //     });
+
+  //     // Emit to all players in room
+  //     io.to(roomId).emit("roomUpdated", { room: roomData });
+
+  //     console.log(`Player ${userName} joined paid room ${roomId} with entry fee ₹${entryFee}`);
+
+  //   } catch (error) {
+  //     console.error("joinPaidRoom error:", error);
+  //     socket.emit("walletError", { message: "Failed to join paid room." });
+  //   }
+  // }); //--->WITHOUT
+    // const handleGameOver = async (roomId, winnerId, winnerName, game) => {
+  //   try {
+  //     const totalPrizePool = game.prizePool || 0;
+  //     const winnerPrize = Math.floor(totalPrizePool * 0.9); // 90% to winner, 10% platform fee
+  
+  //     // Distribute prize to winner
+  //     if (totalPrizePool > 0) {
+  //       const winner = await User.findById(winnerId);
+  //       if (winner) {
+  //         const newBalance = winner.wallet + winnerPrize;
+  
+  //         const transaction = {
+  //           type: "gameWin",
+  //           amount: winnerPrize,
+  //           balanceAfter: newBalance,
+  //           status: "success",
+  //           remarks: `Prize for winning game in room ${roomId}`,
+  //           timestamp: new Date(),
+  //         };
+  
+  //         await User.findByIdAndUpdate(winnerId, {
+  //           wallet: newBalance,
+  //           $push: { transactions: transaction }
+  //         });
+  //       }
+  //     }
+  
+  //     // Update winner stats
+  //     await updateUser(winnerId, {
+  //       $inc: { gamesWon: 1 },
+  //       currentGameStatus: "finished",
+  //     });
+  
+  //     // Update all other players
+  //     for (const p of game.players) {
+  //       if (p.userId !== winnerId) {
+  //         await updateUser(p.userId, {
+  //           currentGameStatus: "finished",
+  //         });
+  //       }
+  //     }
+  
+  //     // Mark game as finished
+  //     game.winnerId = winnerId;
+  //     game.winnerName = winnerName;
+  //     game.prizeWon = winnerPrize;
+  //     game.gameStatus = "finished";
+  
+  //     // Emit gameOver event
+  //     io.to(roomId).emit("gameOver", {
+  //       gameStatus: "ended",
+  //       winnerId,
+  //       winnerName,
+  //       prizeWon: winnerPrize,
+  //       message: `${winnerName} wins the game!`,
+  //       scores: game.players.map((p) => ({
+  //         playerId: p.userId,
+  //         score: p.score,
+  //       })),
+  //     });
+  
+  //     // Save final game state
+  //     await saveGameToMongo(roomId, game);
+  
+  //     // Cleanup
+  //     await delGame(roomId);
+  //     cleanupTimers(roomId);
+  
+  //   } catch (error) {
+  //     console.error("Error in handleGameOver:", error);
+  //   }
+  // };//21
+  
+
+
+
+
+  // const handleGameOver = async (roomId, winnerId, winnerName, game) => {
+  //   try {
+  //     // Calculate prize distribution
+  //     const totalPrizePool = game.prizePool || 0;
+  //     const winnerPrize = Math.floor(totalPrizePool * 0.9); // 90% to winner, 10% platform fee
+      
+  //     // Distribute prize if there's a prize pool
+  //     if (totalPrizePool > 0) {
+  //       socket.emit("distributePrize", { 
+  //         roomId, 
+  //         winnerId, 
+  //         winnerPrize 
+  //       });
+  //     }
+
+  //     // Update winner stats
+  //     await updateUser(winnerId, {
+  //       $inc: { gamesWon: 1 },
+  //       currentGameStatus: "finished",
+  //     });
+
+  //     // Update other players
+  //     for (const p of game.players) {
+  //       if (p.userId !== winnerId) {
+  //         await updateUser(p.userId, {
+  //           currentGameStatus: "finished",
+  //         });
+  //       }
+  //     }
+
+  //     game.winnerId = winnerId;
+  //     game.winnerName = winnerName;
+  //     game.prizeWon = winnerPrize;
+  //     game.gameStatus = "finished";
+
+  //     // Emit game over event
+  //     io.to(roomId).emit("gameOver", {
+  //       gameStatus: "ended",
+  //       winnerId,
+  //       message: `${winnerName} wins the game!`,
+  //       prizeWon: winnerPrize,
+  //       scores: game.players.map((p) => ({
+  //         playerId: p.userId,
+  //         score: p.score,
+  //       })),
+  //     });
+
+  //     await saveGameToMongo(roomId, game);
+
+  //     // Cleanup
+  //     await delGame(roomId);
+  //     cleanupTimers(roomId);
+      
+  //   } catch (error) {
+  //     console.error("Error in handleGameOver:", error);
+  //   }
+  // };
