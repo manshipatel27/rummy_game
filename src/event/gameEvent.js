@@ -199,6 +199,7 @@ module.exports = (io, socket) => {
         userName,
         socketId: socket.id,
         score: 0,
+        totalScore: 0, 
         entryFeePaid: ENTRY_FEE
       };
   
@@ -310,6 +311,21 @@ let deck = rawDeck.map((value, index) => ({
       console.log(`Number of Players: ${numPlayers}`);
       console.log(`Number of Decks Used: ${numDecks}`);
       console.log(`Total Number of Cards After Shuffling: ${deck.length}`);
+      
+       game.players.forEach((player) => {
+      const hand = game.deck.splice(0, cardsPerPlayer);
+      player.hand = hand;
+      player.originalHand = [...hand]; // 🔥 Store original hand for penalty calculation
+      player.melds = [];
+      
+      // Initialize totalScore if it's first round
+      if (!player.totalScore) {
+        player.totalScore = 0;
+      }
+      
+      io.to(player.socketId).emit("playerHand", { hand: player.hand });
+    });
+
 
       let cardsPerPlayer = 13;
 
